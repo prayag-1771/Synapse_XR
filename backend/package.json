@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "test:realtime:worker": "tsx scripts/realtime/fake-worker-listener.ts",
+    "test:realtime:expert": "tsx scripts/realtime/fake-expert-sender.ts",
+    "test:realtime:pair": "tsx scripts/realtime/fake-pair.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -16,6 +19,7 @@
     "pg": "^8.16.3",
     "redis": "^5.8.2",
     "socket.io": "^4.8.0",
+    "socket.io-client": "^4.8.0",
     "uuid": "^11.0.3"
   },
   "devDependencies": {
