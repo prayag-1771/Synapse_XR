@@ -8,9 +8,18 @@ import { logger } from "./services/logger";
 
 export const app = express();
 
+const allowedOrigins = Array.from(new Set(["http://localhost:3000", env.clientOrigin].filter(Boolean)));
+
 app.use(
   cors({
-    origin: env.clientOrigin,
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error("Not allowed by CORS"));
+    },
     credentials: true
   })
 );
