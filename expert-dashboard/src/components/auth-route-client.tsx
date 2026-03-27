@@ -1,12 +1,14 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import ConsoleShell from "@/components/console-shell";
-import { api } from "@/lib/api";
+import { api, backendHttpBaseUrl } from "@/lib/api";
 import { readAuth, writeAuth } from "@/lib/authStorage";
 
 type AuthMode = "login" | "register";
+
+const configuredBackendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? backendHttpBaseUrl;
 
 export default function AuthRouteClient() {
   const router = useRouter();
@@ -24,7 +26,7 @@ export default function AuthRouteClient() {
     }
   }, [router]);
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsSubmitting(true);
     setFeedback(null);
@@ -50,7 +52,7 @@ export default function AuthRouteClient() {
       <section className="grid gap-4 md:grid-cols-[2fr_3fr]">
         <article className="rounded-2xl border border-black/10 bg-black/5 p-5">
           <h2 className="text-lg font-medium">Connection Profile</h2>
-          <p className="mt-2 text-sm text-black/70">Backend target: NEXT_PUBLIC_BACKEND_URL</p>
+          <p className="mt-2 text-sm text-black/70">Backend target: {configuredBackendUrl}</p>
           <p className="mt-4 text-sm text-black/70">
             Mode: <span className="font-medium text-black">{authMode}</span>
           </p>

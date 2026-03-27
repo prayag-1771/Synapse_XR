@@ -50,7 +50,7 @@ interface AdminSessionsResponse {
   sessions: Session[];
 }
 
-export const backendHttpBaseUrl = (process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:3001").replace(/\/$/, "");
+export const backendHttpBaseUrl = (process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:3000").replace(/\/$/, "");
 export const backendWsBaseUrl = (process.env.NEXT_PUBLIC_BACKEND_WS_URL ?? backendHttpBaseUrl).replace(/\/$/, "");
 
 interface RequestOptions {
