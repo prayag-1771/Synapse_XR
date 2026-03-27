@@ -12,7 +12,7 @@ Both the expert and worker see the **same view**: the worker's real-world camera
 
 ### How It Works
 
-```
+```md
 ┌──────────────┐          ┌─────────────────────┐          ┌──────────────┐
 │  EXPERT SIDE │          │       BACKEND        │          │  WORKER SIDE │
 │              │          │                      │          │              │
@@ -28,10 +28,12 @@ Both the expert and worker see the **same view**: the worker's real-world camera
 ```
 
 ### Input Modes for Expert Hand Tracking
+
 1. **Camera Mode (Fallback):** Expert's webcam → MediaPipe Hands → 21 landmarks
 2. **Glove Mode:** ESP32 + flex sensors + IMU → 21 landmarks
 
 ### AI Features
+
 - **YOLOv8 Nano** (TFLite) — real-time object detection on worker's phone
 - **LSTM Smoothing** — removes jitter from hand landmarks for natural motion
 - **Gemini 2.0 Flash** — step validation, safety alerts, scene analysis
@@ -43,7 +45,7 @@ Both the expert and worker see the **same view**: the worker's real-world camera
 ## Tech Stack
 
 | Layer | Technology | Cost |
-|---|---|---|
+| --- | --- | --- |
 | Expert Frontend | Next.js, MediaPipe Hands JS, Web Speech API, WebRTC | Free |
 | Backend | Node.js, Express, Socket.IO, PostgreSQL | Free |
 | Worker App | Unity (C#), AR Foundation, ARCore XR Plugin | Free |
@@ -58,7 +60,7 @@ Both the expert and worker see the **same view**: the worker's real-world camera
 
 ## Project Structure
 
-```
+```md
 Synapse_XR/
 ├── backend/                 # Ishaan — Node.js + Express + Socket.IO
 │   ├── routes/              # REST APIs (auth, sessions, gemini)
@@ -95,6 +97,7 @@ Synapse_XR/
 ```
 
 ## Git Rules
+
 - Each person commits ONLY to their own folder(s)
 - `shared/` is modified only by Prayag (team lead)
 - Always `git pull` before starting work
@@ -103,22 +106,27 @@ Synapse_XR/
 ## Quick Start
 
 ### Backend
+
 ```bash
 cd backend && npm install && npm start
 ```
 
 ### Expert Dashboard
+
 ```bash
 cd expert-dashboard && npm install && npm run dev
 ```
 
 ### AI Models
+
 ```bash
 cd ai-models && pip install ultralytics torch mediapipe tensorflow
 ```
 
 ### ESP32 Glove
+
 Open `esp32-glove/firmware/main.ino` in Arduino IDE, set WiFi credentials in `config.h`, upload to ESP32.
 
 ### Unity AR App
+
 Open `unity-ar-app/` in Unity Hub. Install AR Foundation + ARCore XR Plugin via Package Manager. Build for Android.

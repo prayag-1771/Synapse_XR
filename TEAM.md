@@ -3,8 +3,9 @@
 ## Members
 
 ### Prayag Sharma — Team Lead
+
 - **Role:** AI/ML + Unity AR App
-- **Email:** prayag.sharma2024@vitstudent.ac.in
+- **Email:** <prayag.sharma2024@vitstudent.ac.in>
 - **Phone:** 9872041778
 - **Owns:** `unity-ar-app/`, `shared/`, `expert-dashboard/src/components/HandTracker.tsx`
 - **Responsibilities:**
@@ -22,8 +23,9 @@
   - Define shared JSON schemas
 
 ### Pushkar Kumar Mishra
+
 - **Role:** ESP32 Glove Hardware
-- **Email:** pushkar.kumarmishra2024@vitstudent.ac.in
+- **Email:** <pushkar.kumarmishra2024@vitstudent.ac.in>
 - **Phone:** 9229714162
 - **Owns:** `esp32-glove/`
 - **Responsibilities:**
@@ -35,8 +37,9 @@
   - Latency optimization
 
 ### R Sudarsan
+
 - **Role:** AI Model Training + AR Overlays
-- **Email:** sudarsan.r2024@vitstudent.ac.in
+- **Email:** <sudarsan.r2024@vitstudent.ac.in>
 - **Phone:** 7416811107
 - **Owns:** `ai-models/`, `unity-ar-app/Assets/Scripts/AROverlayManager.cs`
 - **Responsibilities:**
@@ -49,8 +52,9 @@
   - AR overlay UI in Unity (bounding boxes, alerts, subtitles)
 
 ### Ishaan Jindal
+
 - **Role:** Backend + Expert Web Dashboard
-- **Email:** ishaan.jindal2024@vitstudent.ac.in
+- **Email:** <ishaan.jindal2024@vitstudent.ac.in>
 - **Phone:** 9041856973
 - **Owns:** `backend/`, `expert-dashboard/`
 - **Responsibilities:**
@@ -66,7 +70,7 @@
 ## Collaboration Points
 
 | Integration | People | How |
-|---|---|---|
+| --- | --- | --- |
 | Hand landmark JSON schema | Prayag defines → All follow | `shared/schemas/hand_landmark.json` |
 | WebSocket events | Ishaan defines → All follow | `shared/schemas/events.json` |
 | YOLO TFLite model | Sudarsan trains → Prayag loads in Unity | Share via Google Drive |
@@ -79,32 +83,36 @@
 ## Timeline
 
 ### Day 1: Foundations
+
 | Person | Task |
-|---|---|
+| --- | --- |
 | Prayag | Unity setup, hand schema, MediaPipe Hands, WebSocket client |
 | Sudarsan | Dataset collection, start YOLO + LSTM training |
 | Ishaan | Backend scaffold, Socket.IO, WebRTC signaling, REST APIs |
 | Pushkar | Sensor wiring, reading flex + IMU, calibration |
 
 ### Day 1-2: Core Features
+
 | Person | Task |
-|---|---|
+| --- | --- |
 | Prayag | 3D hand rendering, gesture detection, LSTM integration in Unity |
 | Sudarsan | TFLite export, Gemini prompts, AR overlay UI |
 | Ishaan | Next.js dashboard, video viewer, hand data relay |
 | Pushkar | Sensor → landmark mapping, WebSocket transmission |
 
 ### Day 2: Integration
+
 | Person | Task |
-|---|---|
+| --- | --- |
 | All | Connect: dashboard ↔ backend ↔ Unity ↔ ESP32 |
 | Prayag + Sudarsan | YOLO + LSTM into Unity, end-to-end AI test |
 | Ishaan | Gemini endpoint, voice relay, annotation relay |
 | Pushkar | Glove → server → Unity pipeline test |
 
 ### Day 2-3: Polish
+
 | Person | Task |
-|---|---|
+| --- | --- |
 | Prayag | Haptic feedback, camera fallback, gesture effects |
 | Sudarsan | AR overlay polish, safety alerts, step indicators |
 | Ishaan | Voice subtitles, annotations, session recording |
