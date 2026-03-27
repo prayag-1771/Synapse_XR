@@ -1,5 +1,9 @@
 # Backend Setup (Redis + PostgreSQL)
 
+## Documentation
+
+- API contract: `docs/API.md`
+
 ## Environment
 
 Copy `.env.example` to `.env` and set values:
@@ -73,6 +77,19 @@ Example admin promotion:
 ```sql
 UPDATE users SET role = 'admin' WHERE email = 'admin@example.com';
 ```
+
+## Admin Routes
+
+All admin routes require an authenticated `admin` token.
+
+- `GET /admin/users`
+	- List all users with role metadata.
+- `PATCH /admin/users/:id/role`
+	- Update user role (`worker`, `expert`, `admin`).
+- `GET /admin/sessions?status=active|ended`
+	- List sessions (optionally filtered by status).
+- `POST /admin/sessions/:id/end`
+	- Force-end any session.
 
 ## Example: Redis Pub/Sub + Socket.IO
 

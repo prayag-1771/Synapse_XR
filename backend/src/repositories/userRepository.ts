@@ -81,8 +81,40 @@ const findById = async (id: string): Promise<User | null> => {
   return mapUserRow(rows[0]);
 };
 
+const listAll = async (): Promise<User[]> => {
+  const { rows } = await pgQuery<UserRow>(
+    `
+    SELECT id, email, password_hash, role, created_at
+    FROM users
+    ORDER BY created_at DESC
+    `
+  );
+
+  return rows.map(mapUserRow);
+};
+
+const updateRole = async (id: string, role: UserRole): Promise<User | null> => {
+  const { rows } = await pgQuery<UserRow>(
+    `
+    UPDATE users
+    SET role = $2
+    WHERE id = $1
+    RETURNING id, email, password_hash, role, created_at
+    `,
+    [id, role]
+  );
+
+  if (rows.length === 0) {
+    return null;
+  }
+
+  return mapUserRow(rows[0]);
+};
+
 export const userRepository = {
   create,
   findByEmail,
-  findById
+  findById,
+  listAll,
+  updateRole
 };

@@ -107,6 +107,39 @@ const listOpenSessions = async (): Promise<Session[]> => {
   return rows.map(mapSessionRow);
 };
 
+const listAll = async (status?: "active" | "ended"): Promise<Session[]> => {
+  const params: string[] = [];
+  let whereClause = "";
+
+  if (status) {
+    params.push(status);
+    whereClause = "WHERE s.status = $1";
+  }
+
+  const { rows } = await pgQuery<SessionRow>(
+    `
+    SELECT
+      s.id,
+      s.created_by,
+      s.status,
+      s.created_at,
+      s.ended_at,
+      COALESCE(
+        ARRAY_AGG(sp.user_id) FILTER (WHERE sp.user_id IS NOT NULL),
+        ARRAY[]::uuid[]
+      )::text[] AS participants
+    FROM sessions s
+    LEFT JOIN session_participants sp ON sp.session_id = s.id
+    ${whereClause}
+    GROUP BY s.id
+    ORDER BY s.created_at DESC
+    `,
+    params
+  );
+
+  return rows.map(mapSessionRow);
+};
+
 const addParticipant = async (sessionId: string, userId: string): Promise<Session> => {
   const session = await findById(sessionId);
   if (!session) {
@@ -210,6 +243,7 @@ const forceEnd = async (sessionId: string): Promise<Session> => {
 export const sessionRepository = {
   create,
   findById,
+  listAll,
   listOpenSessions,
   addParticipant,
   removeParticipant,

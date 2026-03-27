@@ -2,6 +2,7 @@ import cors from "cors";
 import express from "express";
 import { env } from "./config/env";
 import authRoutes from "./routes/auth";
+import adminRoutes from "./routes/admin";
 import sessionRoutes from "./routes/sessions";
 import { logger } from "./services/logger";
 
@@ -34,3 +35,4 @@ app.get("/health", (_req, res) => {
 
 app.use("/auth", authRoutes);
 app.use("/sessions", sessionRoutes);
+app.use("/admin", adminRoutes);
