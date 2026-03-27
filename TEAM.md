@@ -9,13 +9,16 @@
 - **Owns:** `unity-ar-app/`, `shared/`, `expert-dashboard/src/components/HandTracker.tsx`
 - **Responsibilities:**
   - MediaPipe Hands integration (browser webcam tracking)
-  - LSTM smoothing model integration
+  - LSTM smoothing model integration (before that kalma filtere or exponential filter)
   - Unity AR app (AR Foundation + ARCore)
   - 3D hand rendering from landmark data
   - Gesture detection (thumbs up, fist, pointing)
   - Haptic feedback (phone vibration)
   - YOLOv8 TFLite integration into Unity
   - Camera fallback mode
+  - Hand smoothing pipeline:
+    - **Phase 1 (Day 1):** Kalman Filter — instant, no training needed, removes basic jitter
+    - **Phase 2 (Day 2+):** LSTM model — swap in once Sudarsan finishes training, learns natural hand motion patterns, handles occlusion & dropped frames
   - Define shared JSON schemas
 
 ### Pushkar Kumar Mishra
