@@ -46,6 +46,11 @@ Open `http://localhost:3000`.
 - `/dashboard` is the session launcher/control hub.
 - `/session/[id]` is the per-session control and glove inspection screen.
 
+## Dashboard Docs
+
+- Detailed dashboard docs are maintained in `docs/`.
+- Start at `docs/README.md` for architecture, routes, and development workflow notes.
+
 ## Notes
 
 - This phase focuses on backend integration and operator controls.
