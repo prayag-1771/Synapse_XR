@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Unity
+unity-ar-app/Library/
+unity-ar-app/Temp/
+unity-ar-app/Obj/
+unity-ar-app/Build/
+unity-ar-app/Builds/
+unity-ar-app/Logs/
+unity-ar-app/UserSettings/
+unity-ar-app/MemoryCaptures/
+unity-ar-app/Assets/Plugins/
+*.csproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+
+# AI Models (large files)
+ai-models/datasets/*.zip
+ai-models/datasets/*.tar.gz
+ai-models/exported/*.tflite
+ai-models/exported/*.pt
+ai-models/exported/*.onnx
+*.weights
+
+# ESP32
+esp32-glove/firmware/.pio/
+esp32-glove/firmware/.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
