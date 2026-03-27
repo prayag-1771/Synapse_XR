@@ -1,12 +1,26 @@
 import { Server as HttpServer } from "http";
 import { Server, Socket } from "socket.io";
 import { env } from "../config/env";
+import {
+  publishToRealtimeChannel,
+  setLatestGloveState,
+  subscribeToRealtimeChannel
+} from "../db/redis";
 import { logger } from "./logger";
 
 interface SessionJoinPayload {
   sessionId?: string;
   userId?: string;
 }
+
+interface RedisRelayEnvelope {
+  originServerId: string;
+  eventName: string;
+  sessionId: string;
+  payload: unknown;
+}
+
+const REDIS_SOCKET_CHANNEL = "synapse:socket:events";
 
 const relayedEvents = [
   "hand:data",
@@ -20,6 +34,22 @@ const relayedEvents = [
 ] as const;
 
 const getSessionRoom = (sessionId: string): string => `session:${sessionId}`;
+
+const publishRelayEvent = async (
+  originServerId: string,
+  eventName: string,
+  sessionId: string,
+  payload: unknown
+): Promise<void> => {
+  const envelope: RedisRelayEnvelope = {
+    originServerId,
+    eventName,
+    sessionId,
+    payload
+  };
+
+  await publishToRealtimeChannel(REDIS_SOCKET_CHANNEL, JSON.stringify(envelope));
+};
 
 const registerSessionJoin = (socket: Socket): void => {
   socket.on("session:join", ({ sessionId, userId }: SessionJoinPayload) => {
@@ -67,10 +97,21 @@ const registerSessionEnd = (socket: Socket): void => {
       endedBy: socket.data.userId ?? "unknown"
     });
 
-    socket.to(getSessionRoom(targetSession)).emit("session:end", {
+    const payload = {
       sessionId: targetSession,
       endedBy: socket.data.userId ?? "unknown"
-    });
+    };
+
+    socket.to(getSessionRoom(targetSession)).emit("session:end", payload);
+    void publishRelayEvent(socket.data.serverId as string, "session:end", targetSession, payload).catch(
+      (error) => {
+        logger.error("socket_relay_publish_failed", {
+          eventName: "session:end",
+          sessionId: targetSession,
+          error: error instanceof Error ? error.message : "Unknown publish error"
+        });
+      }
+    );
   });
 };
 
@@ -95,11 +136,28 @@ const registerRelayEvents = (socket: Socket): void => {
       });
 
       socket.to(getSessionRoom(sessionId)).emit(eventName, payload);
+
+      if (eventName === "hand:data") {
+        void setLatestGloveState(sessionId, payload).catch((error) => {
+          logger.error("redis_glove_state_write_failed", {
+            sessionId,
+            error: error instanceof Error ? error.message : "Unknown Redis write error"
+          });
+        });
+      }
+
+      void publishRelayEvent(socket.data.serverId as string, eventName, sessionId, payload).catch((error) => {
+        logger.error("socket_relay_publish_failed", {
+          eventName,
+          sessionId,
+          error: error instanceof Error ? error.message : "Unknown publish error"
+        });
+      });
     });
   }
 };
 
-export const setupSocket = (httpServer: HttpServer): Server => {
+export const setupSocket = (httpServer: HttpServer, serverId: string): Server => {
   const io = new Server(httpServer, {
     cors: {
       origin: env.clientOrigin,
@@ -108,6 +166,7 @@ export const setupSocket = (httpServer: HttpServer): Server => {
   });
 
   io.on("connection", (socket) => {
+    socket.data.serverId = serverId;
     logger.info("socket_connected", { socketId: socket.id });
 
     registerSessionJoin(socket);
@@ -139,4 +198,27 @@ export const setupSocket = (httpServer: HttpServer): Server => {
   });
 
   return io;
+};
+
+export const attachSocketRedisBridge = async (io: Server, serverId: string): Promise<void> => {
+  await subscribeToRealtimeChannel(REDIS_SOCKET_CHANNEL, (message) => {
+    try {
+      const event = JSON.parse(message) as RedisRelayEnvelope;
+
+      if (event.originServerId === serverId) {
+        return;
+      }
+
+      io.to(getSessionRoom(event.sessionId)).emit(event.eventName, event.payload);
+    } catch (error) {
+      logger.error("socket_relay_consume_failed", {
+        error: error instanceof Error ? error.message : "Unknown consume error"
+      });
+    }
+  });
+
+  logger.info("socket_redis_bridge_ready", {
+    channel: REDIS_SOCKET_CHANNEL,
+    serverId
+  });
 };

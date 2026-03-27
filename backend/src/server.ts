@@ -1,11 +1,15 @@
 import { createServer } from "http";
+import { randomUUID } from "node:crypto";
 import { app } from "./app";
+import { pingPostgres, shutdownPostgres } from "./db/postgres";
+import { initRedis, shutdownRedis } from "./db/redis";
 import { env } from "./config/env";
 import { logger } from "./services/logger";
-import { setupSocket } from "./services/socketService";
+import { attachSocketRedisBridge, setupSocket } from "./services/socketService";
 
 const httpServer = createServer(app);
-const io = setupSocket(httpServer);
+const serverId = randomUUID();
+const io = setupSocket(httpServer, serverId);
 let isShuttingDown = false;
 const MAX_PORT_BIND_RETRIES = 5;
 let portBindRetryCount = 0;
@@ -53,6 +57,8 @@ const shutdown = async (signal: string): Promise<void> => {
         resolve();
       });
     });
+
+    await Promise.allSettled([shutdownRedis(), shutdownPostgres()]);
 
     logger.info("server_shutdown_completed", { signal });
     process.exit(0);
@@ -125,4 +131,24 @@ httpServer.on("error", (error: NodeJS.ErrnoException) => {
   process.exit(1);
 });
 
-startListening();
+const bootstrap = async (): Promise<void> => {
+  try {
+    await pingPostgres();
+    logger.info("postgres_connected");
+
+    await initRedis();
+    logger.info("redis_connected", {
+      redisUrl: env.redisUrl
+    });
+
+    await attachSocketRedisBridge(io, serverId);
+    startListening();
+  } catch (error) {
+    logger.error("server_bootstrap_failed", {
+      error: error instanceof Error ? error.message : "Unknown bootstrap error"
+    });
+    process.exit(1);
+  }
+};
+
+void bootstrap();

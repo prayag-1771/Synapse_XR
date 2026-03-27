@@ -2,11 +2,11 @@ import { Router } from "express";
 import { authMiddleware } from "../middleware/auth";
 import { authService } from "../services/authService";
 import { logger } from "../services/logger";
-import { usersStore } from "../store/usersStore";
+import { userRepository } from "../repositories/userRepository";
 
 const router = Router();
 
-router.post("/register", (req, res) => {
+router.post("/register", async (req, res) => {
   const { email, password } = req.body as { email?: string; password?: string };
 
   if (!email || !password) {
@@ -21,7 +21,7 @@ router.post("/register", (req, res) => {
 
   try {
     const hashedPassword = authService.hashPassword(password);
-    const user = usersStore.create(email, hashedPassword);
+    const user = await userRepository.create(email, hashedPassword);
     const token = authService.generateToken({ userId: user.id, email: user.email });
 
     logger.info("auth_register_success", {
@@ -47,7 +47,7 @@ router.post("/register", (req, res) => {
   }
 });
 
-router.post("/login", (req, res) => {
+router.post("/login", async (req, res) => {
   const { email, password } = req.body as { email?: string; password?: string };
 
   if (!email || !password) {
@@ -55,7 +55,7 @@ router.post("/login", (req, res) => {
     return;
   }
 
-  const user = usersStore.findByEmail(email);
+  const user = await userRepository.findByEmail(email);
 
   if (!user || !authService.comparePassword(password, user.password)) {
     res.status(401).json({ error: "Invalid credentials" });
@@ -74,14 +74,14 @@ router.post("/login", (req, res) => {
   });
 });
 
-router.get("/me", authMiddleware, (req, res) => {
+router.get("/me", authMiddleware, async (req, res) => {
   const userId = req.user?.userId;
   if (!userId) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
 
-  const user = usersStore.findById(userId);
+  const user = await userRepository.findById(userId);
   if (!user) {
     res.status(404).json({ error: "User not found" });
     return;

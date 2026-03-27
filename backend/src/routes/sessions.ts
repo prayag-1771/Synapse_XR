@@ -1,18 +1,19 @@
 import { Router } from "express";
 import { authMiddleware } from "../middleware/auth";
+import { sessionRepository } from "../repositories/sessionRepository";
+import { getLatestGloveState } from "../db/redis";
 import { logger } from "../services/logger";
-import { sessionsStore } from "../store/sessionsStore";
 
 const router = Router();
 
-router.post("/", authMiddleware, (req, res) => {
+router.post("/", authMiddleware, async (req, res) => {
   const userId = req.user?.userId;
   if (!userId) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
 
-  const session = sessionsStore.create(userId);
+  const session = await sessionRepository.create(userId);
   logger.info("session_created", {
     sessionId: session.id,
     createdBy: userId
@@ -20,7 +21,7 @@ router.post("/", authMiddleware, (req, res) => {
   res.status(201).json({ session });
 });
 
-router.get("/:id", authMiddleware, (req, res) => {
+router.get("/:id", authMiddleware, async (req, res) => {
   const userId = req.user?.userId;
   const sessionId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   if (!userId) {
@@ -28,7 +29,7 @@ router.get("/:id", authMiddleware, (req, res) => {
     return;
   }
 
-  const session = sessionsStore.findById(sessionId);
+  const session = await sessionRepository.findById(sessionId);
   if (!session) {
     res.status(404).json({ error: "Session not found" });
     return;
@@ -43,7 +44,32 @@ router.get("/:id", authMiddleware, (req, res) => {
   res.json({ session });
 });
 
-router.post("/:id/join", authMiddleware, (req, res) => {
+router.get("/:id/glove/latest", authMiddleware, async (req, res) => {
+  const userId = req.user?.userId;
+  const sessionId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const session = await sessionRepository.findById(sessionId);
+  if (!session) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  const canAccess = session.participants.includes(userId) || session.createdBy === userId;
+  if (!canAccess) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  const latest = await getLatestGloveState<Record<string, unknown>>(sessionId);
+  res.json({ latest });
+});
+
+router.post("/:id/join", authMiddleware, async (req, res) => {
   const userId = req.user?.userId;
   const sessionId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   if (!userId) {
@@ -52,7 +78,7 @@ router.post("/:id/join", authMiddleware, (req, res) => {
   }
 
   try {
-    const session = sessionsStore.addParticipant(sessionId, userId);
+    const session = await sessionRepository.addParticipant(sessionId, userId);
     logger.info("session_joined", {
       sessionId,
       userId,
@@ -71,7 +97,7 @@ router.post("/:id/join", authMiddleware, (req, res) => {
   }
 });
 
-router.post("/:id/leave", authMiddleware, (req, res) => {
+router.post("/:id/leave", authMiddleware, async (req, res) => {
   const userId = req.user?.userId;
   const sessionId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   if (!userId) {
@@ -80,7 +106,7 @@ router.post("/:id/leave", authMiddleware, (req, res) => {
   }
 
   try {
-    const session = sessionsStore.removeParticipant(sessionId, userId);
+    const session = await sessionRepository.removeParticipant(sessionId, userId);
     logger.info("session_left", {
       sessionId,
       userId,
@@ -99,7 +125,7 @@ router.post("/:id/leave", authMiddleware, (req, res) => {
   }
 });
 
-router.post("/:id/end", authMiddleware, (req, res) => {
+router.post("/:id/end", authMiddleware, async (req, res) => {
   const userId = req.user?.userId;
   const sessionId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   if (!userId) {
@@ -108,7 +134,7 @@ router.post("/:id/end", authMiddleware, (req, res) => {
   }
 
   try {
-    const session = sessionsStore.end(sessionId, userId);
+    const session = await sessionRepository.end(sessionId, userId);
     logger.info("session_deleted", {
       sessionId,
       deletedBy: userId,
