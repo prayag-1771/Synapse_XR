@@ -1,9 +1,14 @@
 import { io } from "socket.io-client";
 
 const wsUrl = process.env.BACKEND_WS_URL ?? "http://localhost:5000";
+const token = process.env.BACKEND_TOKEN;
 const sessionId = process.argv[2] ?? "test-session";
-const userId = process.argv[3] ?? "expert-test";
-const hz = Number(process.argv[4] ?? "20");
+const hz = Number(process.argv[3] ?? "20");
+
+if (!token) {
+  console.error("Set BACKEND_TOKEN before running this script.");
+  process.exit(1);
+}
 
 const intervalMs = Math.max(10, Math.floor(1000 / Math.max(1, hz)));
 
@@ -17,7 +22,8 @@ const makeLandmarks = (frame: number) => {
 };
 
 const socket = io(wsUrl, {
-  transports: ["websocket"]
+  transports: ["websocket"],
+  auth: { token }
 });
 
 let frame = 0;
@@ -25,8 +31,8 @@ let timer: NodeJS.Timeout | null = null;
 
 socket.on("connect", () => {
   console.log(`[expert] connected: ${socket.id}`);
-  socket.emit("session:join", { sessionId, userId });
-  console.log(`[expert] joined session ${sessionId} as ${userId}`);
+  socket.emit("session:join", { sessionId });
+  console.log(`[expert] joined session ${sessionId}`);
 
   timer = setInterval(() => {
     frame += 1;

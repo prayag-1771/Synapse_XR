@@ -1,9 +1,16 @@
 import { io } from "socket.io-client";
 
 const wsUrl = process.env.BACKEND_WS_URL ?? "http://localhost:5000";
+const workerToken = process.env.BACKEND_TOKEN_WORKER;
+const expertToken = process.env.BACKEND_TOKEN_EXPERT;
 const sessionId = process.argv[2] ?? `test-${Date.now()}`;
 const durationSeconds = Number(process.argv[3] ?? "10");
 const hz = Number(process.argv[4] ?? "20");
+
+if (!workerToken || !expertToken) {
+  console.error("Set BACKEND_TOKEN_WORKER and BACKEND_TOKEN_EXPERT before running this script.");
+  process.exit(1);
+}
 
 const intervalMs = Math.max(10, Math.floor(1000 / Math.max(1, hz)));
 const runMs = Math.max(1000, durationSeconds * 1000);
@@ -17,8 +24,14 @@ const makeLandmarks = (frame: number) => {
   }));
 };
 
-const expert = io(wsUrl, { transports: ["websocket"] });
-const worker = io(wsUrl, { transports: ["websocket"] });
+const expert = io(wsUrl, {
+  transports: ["websocket"],
+  auth: { token: expertToken }
+});
+const worker = io(wsUrl, {
+  transports: ["websocket"],
+  auth: { token: workerToken }
+});
 
 let tx = 0;
 let rx = 0;
@@ -37,11 +50,11 @@ const cleanup = (code: number) => {
 };
 
 worker.on("connect", () => {
-  worker.emit("session:join", { sessionId, userId: "worker-test" });
+  worker.emit("session:join", { sessionId });
 });
 
 expert.on("connect", () => {
-  expert.emit("session:join", { sessionId, userId: "expert-test" });
+  expert.emit("session:join", { sessionId });
 
   timer = setInterval(() => {
     tx += 1;

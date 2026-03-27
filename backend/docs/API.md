@@ -479,10 +479,18 @@ Socket endpoint:
 - Same host/port as backend server.
 - CORS origin is `CLIENT_ORIGIN`.
 
+Authentication:
+
+- Required at socket connect time.
+- Provide JWT via Socket.IO auth payload `{ token: "<jwt>" }`.
+- `Authorization: Bearer <jwt>` header is also accepted.
+
 ### Client -> Server Events
 
 - `session:join`
-  - payload: `{ sessionId: string, userId?: string }`
+  - payload: `{ sessionId: string }`
+  - server derives user identity from the authenticated socket token
+  - socket join is allowed only if user is an active session participant (or `admin`)
 - `session:end`
   - payload: `{ sessionId?: string }`
 - Relayed events (all require `sessionId` in payload or prior session join):
@@ -507,3 +515,4 @@ Notes:
 
 - `hand:data` also updates Redis latest glove state per session.
 - Realtime events are bridged across backend instances via Redis Pub/Sub.
+- If a socket is already joined to a session, relayed event `sessionId` must match the joined session.
