@@ -1,8 +1,12 @@
 const express = require('express');
 const http = require('http');
+const path = require('path');
 const { Server } = require('socket.io');
 
 const app = express();
+
+// Serve the worker demo page at /demo
+app.use('/demo', express.static(path.join(__dirname, '..', 'demo')));
 const server = http.createServer(app);
 
 const io = new Server(server, {
@@ -82,10 +86,11 @@ app.get('/health', (req, res) => {
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`
-╔═══════════════════════════════════════════╗
-║   🚀  Synapse XR Relay Server Live        ║
-║   📡  WebSocket: ws://localhost:${PORT}      ║
-║   🔗  Health:    http://localhost:${PORT}/health ║
-╚═══════════════════════════════════════════╝
+╔═══════════════════════════════════════════════╗
+║   Synapse XR Relay Server Live                ║
+║   WebSocket:   ws://localhost:${PORT}            ║
+║   Health:      http://localhost:${PORT}/health       ║
+║   Worker Demo: http://localhost:${PORT}/demo         ║
+╚═══════════════════════════════════════════════╝
   `);
 });
