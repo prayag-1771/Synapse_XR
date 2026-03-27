@@ -13,6 +13,7 @@ export default function AuthRouteClient() {
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [role, setRole] = useState<"worker" | "expert">("worker");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +31,7 @@ export default function AuthRouteClient() {
     setError(null);
 
     try {
-      const response = authMode === "login" ? await api.login(email, password) : await api.register(email, password);
+      const response = authMode === "login" ? await api.login(email, password) : await api.register(email, password, role);
       writeAuth({ token: response.token, user: response.user });
       setFeedback(authMode === "login" ? "Login successful." : "Registration successful.");
       router.push("/dashboard");
@@ -81,6 +82,20 @@ export default function AuthRouteClient() {
                 required
               />
             </label>
+
+            {authMode === "register" && (
+              <label className="grid gap-1 text-sm">
+                <span className="text-black/70">Role</span>
+                <select
+                  className="rounded-xl border border-black/20 bg-white px-3 py-2 outline-none transition focus:border-black"
+                  value={role}
+                  onChange={(event) => setRole(event.target.value as "worker" | "expert")}
+                >
+                  <option value="worker">Worker</option>
+                  <option value="expert">Expert</option>
+                </select>
+              </label>
+            )}
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">

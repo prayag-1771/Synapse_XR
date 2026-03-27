@@ -8,15 +8,20 @@
 
 - `/auth`
   - Login and registration form.
+  - Registration supports role selection (`worker` or `expert`).
   - Persists token/user to local storage.
 
 - `/dashboard`
   - Session launcher and operator hub.
-  - Create new session or open an existing session ID.
+  - Worker: create guidance request session.
+  - Expert/Admin: create/open sessions and view open worker request queue.
+  - Opening a session auto-attempts `join` when access is forbidden for non-participants.
 
 - `/session/[id]`
   - Session-scoped control screen.
   - Actions: refresh, join, leave, end, fetch latest glove state.
+  - Live Socket.IO monitor for connection status, hand packet throughput, and recent event log.
+  - Diagnostics panel for reconnect count, health latency estimate, throughput history, and error buckets.
 
 ## Route Ownership
 

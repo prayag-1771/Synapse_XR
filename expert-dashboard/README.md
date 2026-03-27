@@ -11,8 +11,10 @@ Expert operator UI for authentication, session control, and live glove-state ins
 ## Current Scope
 
 - Login and registration against backend auth endpoints
+- Role-aware registration (`worker`, `expert`)
 - Persistent local auth (token in localStorage)
 - Route-based pages: `/auth`, `/dashboard`, `/session/[id]`
+- Request flow: worker opens request, expert/admin sees open queue and joins
 - Session actions: create/open from dashboard, then join/leave/end from session route
 - Latest glove payload fetch by session id
 
@@ -28,7 +30,10 @@ Expert operator UI for authentication, session control, and live glove-state ins
 
 ```bash
 NEXT_PUBLIC_BACKEND_URL=http://localhost:3001
+NEXT_PUBLIC_BACKEND_WS_URL=http://localhost:3001
 ```
+
+`NEXT_PUBLIC_BACKEND_WS_URL` is optional. If omitted, the dashboard reuses `NEXT_PUBLIC_BACKEND_URL` for Socket.IO.
 
 3. Install and run
 
@@ -44,7 +49,17 @@ Open `http://localhost:3000`.
 - `/` redirects to `/auth` or `/dashboard` depending on stored auth state.
 - `/auth` handles register/login.
 - `/dashboard` is the session launcher/control hub.
+	- Worker can open guidance requests.
+	- Expert/admin can view open request queue and join any request.
+	- Opening a session auto-attempts join if user is not yet a participant.
 - `/session/[id]` is the per-session control and glove inspection screen.
+	- Includes live Socket.IO stream status, hand packet rate, and recent event log.
+
+## Roles
+
+- `worker`: can create guidance requests and join/view participated sessions
+- `expert`: can create sessions, view open request queue, and join worker requests
+- `admin`: privileged backend role (provisioned from backend/DB tooling)
 
 ## Dashboard Docs
 
