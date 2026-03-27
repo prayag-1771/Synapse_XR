@@ -8,21 +8,41 @@ const router = Router();
 
 router.post("/", authMiddleware, async (req, res) => {
   const userId = req.user?.userId;
-  if (!userId) {
+  const role = req.user?.role;
+  if (!userId || !role) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
 
-  const session = await sessionRepository.create(userId);
+  const session = await sessionRepository.create(userId, role);
   logger.info("session_created", {
     sessionId: session.id,
-    createdBy: userId
+    createdBy: userId,
+    role,
+    status: session.status
   });
   res.status(201).json({ session });
 });
 
+router.get("/open", authMiddleware, async (req, res) => {
+  const role = req.user?.role;
+  if (!role) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  if (role !== "expert" && role !== "admin") {
+    res.status(403).json({ error: "Only expert or admin can list open sessions" });
+    return;
+  }
+
+  const sessions = await sessionRepository.listOpenSessions();
+  res.json({ sessions });
+});
+
 router.get("/:id", authMiddleware, async (req, res) => {
   const userId = req.user?.userId;
+  const role = req.user?.role;
   const sessionId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   if (!userId) {
     res.status(401).json({ error: "Unauthorized" });
@@ -35,7 +55,7 @@ router.get("/:id", authMiddleware, async (req, res) => {
     return;
   }
 
-  const canAccess = session.participants.includes(userId) || session.createdBy === userId;
+  const canAccess = role === "admin" || session.participants.includes(userId) || session.createdBy === userId;
   if (!canAccess) {
     res.status(403).json({ error: "Forbidden" });
     return;
@@ -46,6 +66,7 @@ router.get("/:id", authMiddleware, async (req, res) => {
 
 router.get("/:id/glove/latest", authMiddleware, async (req, res) => {
   const userId = req.user?.userId;
+  const role = req.user?.role;
   const sessionId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
   if (!userId) {
@@ -59,7 +80,7 @@ router.get("/:id/glove/latest", authMiddleware, async (req, res) => {
     return;
   }
 
-  const canAccess = session.participants.includes(userId) || session.createdBy === userId;
+  const canAccess = role === "admin" || session.participants.includes(userId) || session.createdBy === userId;
   if (!canAccess) {
     res.status(403).json({ error: "Forbidden" });
     return;
@@ -71,14 +92,20 @@ router.get("/:id/glove/latest", authMiddleware, async (req, res) => {
 
 router.post("/:id/join", authMiddleware, async (req, res) => {
   const userId = req.user?.userId;
+  const role = req.user?.role;
   const sessionId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  if (!role) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
 
   try {
     const session = await sessionRepository.addParticipant(sessionId, userId);
+
     logger.info("session_joined", {
       sessionId,
       userId,
@@ -127,6 +154,7 @@ router.post("/:id/leave", authMiddleware, async (req, res) => {
 
 router.post("/:id/end", authMiddleware, async (req, res) => {
   const userId = req.user?.userId;
+  const role = req.user?.role;
   const sessionId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   if (!userId) {
     res.status(401).json({ error: "Unauthorized" });
@@ -134,7 +162,7 @@ router.post("/:id/end", authMiddleware, async (req, res) => {
   }
 
   try {
-    const session = await sessionRepository.end(sessionId, userId);
+    const session = role === "admin" ? await sessionRepository.forceEnd(sessionId) : await sessionRepository.end(sessionId, userId);
     logger.info("session_deleted", {
       sessionId,
       deletedBy: userId,

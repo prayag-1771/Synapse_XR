@@ -27,12 +27,18 @@ npm run dev
 Use your preferred SQL client and run:
 
 - `db/migrations/001_init.sql`
+- `db/migrations/002_add_user_role.sql`
+- `db/migrations/003_expand_session_status.sql`
 
 Example with psql:
 
 ```bash
 psql postgresql://postgres:postgres@localhost:5432/synapse_xr -f db/migrations/001_init.sql
+psql postgresql://postgres:postgres@localhost:5432/synapse_xr -f db/migrations/002_add_user_role.sql
+psql postgresql://postgres:postgres@localhost:5432/synapse_xr -f db/migrations/003_expand_session_status.sql
 ```
+
+`003_expand_session_status.sql` currently normalizes historical status values and enforces `active/ended`.
 
 ## Example: Redis latest glove state
 
@@ -54,6 +60,18 @@ const latest = await getLatestGloveState<Record<string, unknown>>(sessionId);
 const session = await sessionRepository.create(userId);
 const joined = await sessionRepository.addParticipant(session.id, workerId);
 const ended = await sessionRepository.end(session.id, userId);
+```
+
+## Roles
+
+- Supported roles: `worker`, `expert`, `admin`
+- Public registration accepts `worker` and `expert`
+- `admin` users should be provisioned by migration/SQL tooling or manual DB update
+
+Example admin promotion:
+
+```sql
+UPDATE users SET role = 'admin' WHERE email = 'admin@example.com';
 ```
 
 ## Example: Redis Pub/Sub + Socket.IO

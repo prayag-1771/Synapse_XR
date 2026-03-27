@@ -3,14 +3,22 @@ import { authMiddleware } from "../middleware/auth";
 import { authService } from "../services/authService";
 import { logger } from "../services/logger";
 import { userRepository } from "../repositories/userRepository";
+import { UserRole } from "../types";
 
 const router = Router();
+const REGISTERABLE_ROLES: UserRole[] = ["worker", "expert"];
 
 router.post("/register", async (req, res) => {
-  const { email, password } = req.body as { email?: string; password?: string };
+  const { email, password, role } = req.body as { email?: string; password?: string; role?: string };
 
   if (!email || !password) {
     res.status(400).json({ error: "email and password are required" });
+    return;
+  }
+
+  const normalizedRole = (role ?? "worker").toLowerCase() as UserRole;
+  if (!REGISTERABLE_ROLES.includes(normalizedRole)) {
+    res.status(400).json({ error: "role must be one of: worker, expert" });
     return;
   }
 
@@ -21,12 +29,13 @@ router.post("/register", async (req, res) => {
 
   try {
     const hashedPassword = authService.hashPassword(password);
-    const user = await userRepository.create(email, hashedPassword);
-    const token = authService.generateToken({ userId: user.id, email: user.email });
+    const user = await userRepository.create(email, hashedPassword, normalizedRole);
+    const token = authService.generateToken({ userId: user.id, email: user.email, role: user.role });
 
     logger.info("auth_register_success", {
       userId: user.id,
-      email: user.email
+      email: user.email,
+      role: user.role
     });
 
     res.status(201).json({
@@ -34,6 +43,7 @@ router.post("/register", async (req, res) => {
       user: {
         id: user.id,
         email: user.email,
+        role: user.role,
         createdAt: user.createdAt
       }
     });
@@ -62,13 +72,14 @@ router.post("/login", async (req, res) => {
     return;
   }
 
-  const token = authService.generateToken({ userId: user.id, email: user.email });
+  const token = authService.generateToken({ userId: user.id, email: user.email, role: user.role });
 
   res.json({
     token,
     user: {
       id: user.id,
       email: user.email,
+      role: user.role,
       createdAt: user.createdAt
     }
   });
@@ -91,6 +102,7 @@ router.get("/me", authMiddleware, async (req, res) => {
     user: {
       id: user.id,
       email: user.email,
+      role: user.role,
       createdAt: user.createdAt
     }
   });

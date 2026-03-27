@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { pgQuery, withPgTransaction } from "../db/postgres";
-import { Session } from "../types";
+import { Session, UserRole } from "../types";
 
 interface SessionRow {
   id: string;
@@ -50,7 +50,7 @@ const findById = async (sessionId: string): Promise<Session | null> => {
   return mapSessionRow(rows[0]);
 };
 
-const create = async (createdBy: string): Promise<Session> => {
+const create = async (createdBy: string, creatorRole: UserRole): Promise<Session> => {
   const sessionId = randomUUID();
 
   await withPgTransaction(async (client) => {
@@ -77,6 +77,34 @@ const create = async (createdBy: string): Promise<Session> => {
   }
 
   return session;
+};
+
+const listOpenSessions = async (): Promise<Session[]> => {
+  const { rows } = await pgQuery<SessionRow>(
+    `
+    SELECT
+      s.id,
+      s.created_by,
+      s.status,
+      s.created_at,
+      s.ended_at,
+      COALESCE(
+        ARRAY_AGG(sp.user_id) FILTER (WHERE sp.user_id IS NOT NULL),
+        ARRAY[]::uuid[]
+      )::text[] AS participants
+    FROM sessions s
+    INNER JOIN users creator ON creator.id = s.created_by
+    LEFT JOIN session_participants sp ON sp.session_id = s.id
+    LEFT JOIN users participant_users ON participant_users.id = sp.user_id
+    WHERE s.status = 'active'
+      AND creator.role = 'worker'
+    GROUP BY s.id
+    HAVING COUNT(*) FILTER (WHERE participant_users.role IN ('expert', 'admin')) = 0
+    ORDER BY s.created_at ASC
+    `
+  );
+
+  return rows.map(mapSessionRow);
 };
 
 const addParticipant = async (sessionId: string, userId: string): Promise<Session> => {
@@ -156,10 +184,35 @@ const end = async (sessionId: string, requestedBy: string): Promise<Session> => 
   return updatedSession;
 };
 
+const forceEnd = async (sessionId: string): Promise<Session> => {
+  const session = await findById(sessionId);
+  if (!session) {
+    throw new Error("Session not found");
+  }
+
+  await pgQuery(
+    `
+    UPDATE sessions
+    SET status = 'ended', ended_at = NOW()
+    WHERE id = $1
+    `,
+    [sessionId]
+  );
+
+  const updatedSession = await findById(sessionId);
+  if (!updatedSession) {
+    throw new Error("Session not found");
+  }
+
+  return updatedSession;
+};
+
 export const sessionRepository = {
   create,
   findById,
+  listOpenSessions,
   addParticipant,
   removeParticipant,
-  end
+  end,
+  forceEnd
 };

@@ -1,7 +1,10 @@
+export type UserRole = "worker" | "expert" | "admin";
+
 export interface User {
   id: string;
   email: string;
   password: string;
+  role: UserRole;
   createdAt: string;
 }
 
@@ -17,4 +20,5 @@ export interface Session {
 export interface JwtPayload {
   userId: string;
   email: string;
+  role: UserRole;
 }

@@ -20,6 +20,7 @@ Stores user authentication credentials and identity.
 | `id` | UUID | PRIMARY KEY | Unique user identifier (generated on registration) |
 | `email` | TEXT | UNIQUE, NOT NULL | Email address for login (enforced unique) |
 | `password_hash` | TEXT | NOT NULL | Hashed password (use scrypt or bcrypt) |
+| `role` | TEXT | NOT NULL, CHECK IN ('worker', 'expert', 'admin'), DEFAULT 'worker' | Access role used for session authorization |
 | `created_at` | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Registration timestamp (UTC) |
 
 **Indexes:**
@@ -30,8 +31,8 @@ Stores user authentication credentials and identity.
 **Example:**
 
 ```sql
-INSERT INTO users (id, email, password_hash) 
-VALUES ('550e8400-e29b-41d4-a716-446655440000', 'alice@example.com', '$2b$10$...');
+INSERT INTO users (id, email, password_hash, role)
+VALUES ('550e8400-e29b-41d4-a716-446655440000', 'alice@example.com', '$2b$10$...', 'expert');
 
 SELECT * FROM users WHERE email = 'alice@example.com';
 ```
@@ -60,7 +61,7 @@ Stores telepresence session metadata and lifecycle state.
 **Constraints:**
 
 - Foreign key on `created_by` → `users(id)` (creator must exist)
-- Status must be either 'active' or 'ended'
+- Status must be one of 'active' or 'ended'
 - `ended_at` should be NULL while status='active', populated when status='ended'
 
 **Example:**
@@ -330,9 +331,13 @@ WHERE session_id = $1;
 | Version | Date | Changes |
 | --- | --- | --- |
 | 001 | 2026-03-27 | Initial schema: users, sessions, session_participants, glove_samples with indexes |
+| 002 | 2026-03-27 | Added users.role with role check and index |
+| 003 | 2026-03-27 | Normalized status constraint to active/ended and migrated open->active if present |
 
 To apply migrations:
 
 ```bash
 psql $DATABASE_URL -f db/migrations/001_init.sql
+psql $DATABASE_URL -f db/migrations/002_add_user_role.sql
+psql $DATABASE_URL -f db/migrations/003_expand_session_status.sql
 ```

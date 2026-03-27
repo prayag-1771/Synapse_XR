@@ -15,7 +15,8 @@ export const authMiddleware = (req: Request, res: Response, next: NextFunction):
     const payload = authService.verifyToken(token);
     req.user = {
       userId: payload.userId,
-      email: payload.email
+      email: payload.email,
+      role: payload.role
     };
     next();
   } catch {

@@ -2,6 +2,7 @@ CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY,
   email TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('worker', 'expert', 'admin')) DEFAULT 'worker',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
