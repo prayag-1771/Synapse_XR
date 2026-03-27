@@ -29,32 +29,37 @@ if [ ! -d "$DASHBOARD_DIR/node_modules" ]; then
   (cd "$DASHBOARD_DIR" && npm install)
 fi
 
-# 2. Start backend relay server
+# 2. Start backend relay server (dev mode with tsx watch)
 echo "[demo] Starting backend on :5000..."
-(cd "$BACKEND_DIR" && node server.js) &
+(cd "$BACKEND_DIR" && npm run dev) &
 BACKEND_PID=$!
-sleep 2
+sleep 3
 
 # 3. Start expert dashboard (Next.js dev server)
 echo "[demo] Starting expert dashboard on :3000..."
 (cd "$DASHBOARD_DIR" && npm run dev) &
 DASHBOARD_PID=$!
-sleep 3
+sleep 4
 
 echo ""
 echo "================================================"
 echo "  Synapse XR Demo Ready"
 echo ""
 echo "  Expert Dashboard: http://localhost:3000"
-echo "    (allow camera access -> hand tracking starts)"
+echo "    → Register/login → Create session → Start hand tracking"
 echo ""
 echo "  Worker 3D Demo:   http://localhost:5000/demo"
-echo "    (receives hand data, renders 3D hand)"
+echo "    → Enter session ID from dashboard → See expert's hands in 3D"
 echo ""
 echo "  Server Health:    http://localhost:5000/health"
 echo "================================================"
 echo ""
-echo "Open BOTH URLs side by side. Wave your hand!"
+echo "WORKFLOW:"
+echo "  1. Open Expert Dashboard → register as 'expert' → create session"
+echo "  2. Copy the session ID"
+echo "  3. Open Worker Demo → paste session ID → click Connect"
+echo "  4. In Expert Dashboard → click 'Start Hand Tracking' → wave your hand!"
+echo ""
 echo "Press Ctrl+C to stop."
 echo ""
 

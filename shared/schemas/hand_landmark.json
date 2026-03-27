@@ -15,6 +15,10 @@
       "type": "string",
       "enum": ["left", "right"]
     },
+    "sessionId": {
+      "type": "string",
+      "description": "Session ID for routing hand data to the correct session room"
+    },
     "timestamp": {
       "type": "number",
       "description": "Milliseconds since epoch"

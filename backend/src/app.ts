@@ -1,5 +1,6 @@
 import cors from "cors";
 import express from "express";
+import path from "path";
 import { env } from "./config/env";
 import authRoutes from "./routes/auth";
 import adminRoutes from "./routes/admin";
@@ -8,7 +9,15 @@ import { logger } from "./services/logger";
 
 export const app = express();
 
-const allowedOrigins = Array.from(new Set(["http://localhost:3000", env.clientOrigin].filter(Boolean)));
+const allowedOrigins = Array.from(
+  new Set(
+    [
+      "http://localhost:3000",
+      `http://localhost:${env.port}`,
+      env.clientOrigin
+    ].filter(Boolean)
+  )
+);
 
 app.use(
   cors({
@@ -45,3 +54,7 @@ app.get("/health", (_req, res) => {
 app.use("/auth", authRoutes);
 app.use("/sessions", sessionRoutes);
 app.use("/admin", adminRoutes);
+
+// Serve the demo page at /demo
+app.use("/demo", express.static(path.resolve(__dirname, "../../demo")));
+

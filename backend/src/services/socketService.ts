@@ -1,4 +1,5 @@
 import { Server as HttpServer } from "http";
+import { randomUUID } from "node:crypto";
 import { Server, Socket } from "socket.io";
 import { env } from "../config/env";
 import {
@@ -9,6 +10,17 @@ import {
 import { sessionRepository } from "../repositories/sessionRepository";
 import { authService } from "./authService";
 import { logger } from "./logger";
+
+const getAllowedOrigins = (): string[] =>
+  Array.from(
+    new Set(
+      [
+        "http://localhost:3000",
+        `http://localhost:${env.port}`,
+        env.clientOrigin
+      ].filter(Boolean)
+    )
+  );
 
 interface SessionJoinPayload {
   sessionId?: string;
@@ -118,7 +130,9 @@ const registerSessionJoin = (socket: Socket): void => {
       return;
     }
 
+    const isGuestUser = identity.email.endsWith("@demo");
     const isAllowedParticipant =
+      isGuestUser ||
       identity.role === "admin" || session.createdBy === identity.userId || session.participants.includes(identity.userId);
     if (!isAllowedParticipant) {
       logger.warn("socket_session_join_failed", {
@@ -275,12 +289,28 @@ const registerRelayEvents = (socket: Socket): void => {
 export const setupSocket = (httpServer: HttpServer, serverId: string): Server => {
   const io = new Server(httpServer, {
     cors: {
-      origin: env.clientOrigin,
+      origin: getAllowedOrigins(),
       credentials: true
     }
   });
 
   io.use((socket, next) => {
+    // Guest / demo mode: allow unauthenticated connections for development
+    const isGuestMode = socket.handshake.auth?.mode === "demo" || socket.handshake.query?.mode === "demo";
+
+    if (isGuestMode && env.allowGuestMode) {
+      const guestId = randomUUID();
+      socket.data.userId = guestId;
+      socket.data.email = `guest-${guestId.slice(0, 8)}@demo`;
+      socket.data.role = "worker";
+      logger.info("socket_guest_connected", {
+        socketId: socket.id,
+        guestId
+      });
+      next();
+      return;
+    }
+
     const token = getTokenFromSocket(socket);
     if (!token) {
       logger.warn("socket_auth_failed", {

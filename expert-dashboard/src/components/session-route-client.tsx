@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -7,6 +8,8 @@ import { io, Socket } from "socket.io-client";
 import ConsoleShell from "@/components/console-shell";
 import { api, backendWsBaseUrl, Session, User } from "@/lib/api";
 import { clearAuth, readAuth, writeAuth } from "@/lib/authStorage";
+
+const HandTracker = dynamic(() => import("@/components/HandTracker"), { ssr: false });
 
 const formatTimestamp = (value: string | null): string => {
   if (!value) {
@@ -120,6 +123,9 @@ export default function SessionRouteClient({ sessionId }: SessionRouteClientProp
   const [remotePeerUserId, setRemotePeerUserId] = useState<string | null>(null);
   const [webrtcStatus, setWebrtcStatus] = useState<"idle" | "ready" | "connecting" | "connected" | "error">("idle");
   const [webrtcError, setWebrtcError] = useState<string | null>(null);
+  const [isHandTrackingActive, setIsHandTrackingActive] = useState(false);
+  const [handTrackingStatus, setHandTrackingStatus] = useState<"loading" | "active" | "error" | "stopped">("stopped");
+  const [handEmitCount, setHandEmitCount] = useState(0);
 
   const socketRef = useRef<Socket | null>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -889,7 +895,7 @@ export default function SessionRouteClient({ sessionId }: SessionRouteClientProp
           </div>
 
           <div className="mt-4 grid gap-2 md:grid-cols-4">
-            <button className="rounded-xl border border-black/20 px-3 py-2 text-sm transition hover:bg-black/5 disabled:opacity-50" onClick={runStartVideo} disabled={isBusy || !user}>
+            <button className="rounded-xl border border-black/20 px-3 py-2 text-sm transition hover:bg-black/5 disabled:opacity-50" onClick={runStartVideo} disabled={Boolean(isBusy || !user)}>
               Start Video
             </button>
             <button className="rounded-xl border border-black/20 px-3 py-2 text-sm transition hover:bg-black/5 disabled:opacity-50" onClick={runStopVideo} disabled={isBusy}>
@@ -900,6 +906,44 @@ export default function SessionRouteClient({ sessionId }: SessionRouteClientProp
           </div>
 
           {webrtcError && <p className="mt-3 text-sm text-red-700">{webrtcError}</p>}
+        </article>
+
+        <article className="rounded-2xl border border-black/10 bg-white p-5 md:col-span-2">
+          <h2 className="text-lg font-medium">Expert Hand Tracking (MediaPipe)</h2>
+          <p className="mt-1 text-sm text-black/60">
+            Stream your hand movements to the worker&apos;s AR view.
+          </p>
+
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button
+              className="rounded-xl bg-black px-4 py-2 text-sm text-white transition hover:bg-black/80 disabled:opacity-50"
+              onClick={() => setIsHandTrackingActive(!isHandTrackingActive)}
+              disabled={connectionState !== "connected"}
+            >
+              {isHandTrackingActive ? "Stop Hand Tracking" : "Start Hand Tracking"}
+            </button>
+            <p className="text-sm text-black/70">
+              Status: <span className={`font-medium ${handTrackingStatus === "active" ? "text-emerald-700" : handTrackingStatus === "error" ? "text-red-700" : "text-black"}`}>{handTrackingStatus}</span>
+            </p>
+            {isHandTrackingActive && (
+              <p className="text-sm text-black/70">Packets sent: <span className="font-medium text-black">{handEmitCount}</span></p>
+            )}
+          </div>
+
+          {isHandTrackingActive && socketRef.current && (
+            <div className="mt-4">
+              <HandTracker
+                socket={socketRef.current}
+                sessionId={sessionId}
+                onHandData={() => setHandEmitCount((c) => c + 1)}
+                onStatusChange={setHandTrackingStatus}
+              />
+            </div>
+          )}
+
+          {connectionState !== "connected" && (
+            <p className="mt-3 text-sm text-amber-700">Socket must be connected to start hand tracking.</p>
+          )}
         </article>
 
         <article className="rounded-2xl border border-black/10 bg-white p-5">

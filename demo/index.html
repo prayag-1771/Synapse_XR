@@ -55,6 +55,7 @@
     }
     #gesture-display.active { color: #76ff03; text-shadow: 0 0 24px rgba(118,255,3,0.5); }
     #fps-display, #latency-display, #packet-count { font-size: 12px; color: #666; font-family: monospace; }
+    #session-display { font-size: 11px; color: #888; font-family: monospace; word-break: break-all; }
     #gesture-toast {
       position: absolute; bottom: 80px; left: 50%;
       transform: translateX(-50%) translateY(20px);
@@ -65,6 +66,18 @@
       pointer-events: none; z-index: 20;
     }
     #gesture-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    /* Voice transcript subtitle overlay */
+    #voice-subtitle {
+      position: absolute; bottom: 140px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.7); border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 12px; padding: 10px 24px;
+      font-size: 16px; font-weight: 500; color: #fff;
+      text-align: center; max-width: 70%;
+      opacity: 0; transition: opacity 0.4s;
+      pointer-events: none; z-index: 20;
+    }
+    #voice-subtitle.show { opacity: 1; }
     #bottom-bar {
       position: absolute; bottom: 0; left: 0; right: 0;
       padding: 12px 24px; display: flex; justify-content: center;
@@ -76,9 +89,65 @@
       transform: translate(-50%,-50%); text-align: center;
       color: #ff5252; font-size: 16px; z-index: 30;
     }
+    /* Session join overlay */
+    #session-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(10,10,15,0.92);
+      backdrop-filter: blur(20px);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 100;
+    }
+    #session-overlay.hidden { display: none; }
+    .join-card {
+      background: rgba(20,20,30,0.95);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 20px; padding: 36px 40px;
+      max-width: 420px; width: 90%;
+      text-align: center;
+    }
+    .join-card h1 {
+      font-size: 24px; font-weight: 700;
+      background: linear-gradient(135deg, #00e5ff, #76ff03);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 8px;
+    }
+    .join-card p { font-size: 13px; color: #888; margin-bottom: 24px; }
+    .join-card input {
+      width: 100%; padding: 12px 16px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 10px; color: #e0e0e0;
+      font-size: 14px; font-family: monospace;
+      outline: none; transition: border-color 0.2s;
+      margin-bottom: 16px;
+    }
+    .join-card input:focus { border-color: #00e5ff; }
+    .join-card input::placeholder { color: #555; }
+    .join-card button {
+      width: 100%; padding: 12px;
+      background: linear-gradient(135deg, #00e5ff, #00b0ff);
+      border: none; border-radius: 10px;
+      color: #000; font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: opacity 0.2s;
+    }
+    .join-card button:hover { opacity: 0.85; }
+    .join-card button:disabled { opacity: 0.4; cursor: not-allowed; }
+    .join-error { color: #ff5252; font-size: 12px; margin-top: 12px; }
   </style>
 </head>
 <body>
+  <!-- Session Join Overlay -->
+  <div id="session-overlay">
+    <div class="join-card">
+      <h1>Synapse XR</h1>
+      <p>Worker Demo — Enter a session ID to receive expert hand guidance</p>
+      <input id="session-input" type="text" placeholder="Paste session ID from expert dashboard" autofocus />
+      <button id="join-btn" onclick="joinSession()">Connect to Session</button>
+      <div id="join-error" class="join-error" style="display:none"></div>
+    </div>
+  </div>
+
   <div id="canvas-container">
     <video id="camera-feed" autoplay playsinline muted></video>
   </div>
@@ -87,9 +156,10 @@
     <div class="hud-panel hud-left">
       <div class="status-row">
         <div class="status-dot" id="conn-dot"></div>
-        <span id="conn-text">Connecting...</span>
+        <span id="conn-text">Waiting for session...</span>
       </div>
-      <div class="status-row"><span class="label">Gesture:</span></div>
+      <div id="session-display"></div>
+      <div class="status-row" style="margin-top:6px"><span class="label">Gesture:</span></div>
       <div id="gesture-display">--</div>
     </div>
     <div class="hud-panel hud-right">
@@ -99,6 +169,7 @@
     </div>
   </div>
   <div id="gesture-toast"></div>
+  <div id="voice-subtitle"></div>
   <div id="bottom-bar">
     <span class="bottom-label">Synapse XR Worker Demo</span>
   </div>
@@ -131,7 +202,7 @@
     }
 
     // ─── CONFIG ───────────────────────────────────────────────────
-    const SERVER_URL = "http://localhost:5000";
+    const SERVER_URL = window.location.origin;  // Same origin as backend
     const JOINT_RADIUS = 8;    // pixels
     const BONE_WIDTH = 5;      // pixels
 
@@ -389,6 +460,9 @@
     const handModels = {};
     const HAND_TIMEOUT = 2000;
     let packetCount = 0, lastGesture = "None", toastTimer = null;
+    let socket = null;
+    let activeSessionId = null;
+    let subtitleTimer = null;
 
     const connDot = document.getElementById("conn-dot");
     const connText = document.getElementById("conn-text");
@@ -397,59 +471,151 @@
     const latencyDisplay = document.getElementById("latency-display");
     const packetDisplay = document.getElementById("packet-count");
     const gestureToast = document.getElementById("gesture-toast");
+    const sessionDisplay = document.getElementById("session-display");
+    const sessionOverlay = document.getElementById("session-overlay");
+    const voiceSubtitle = document.getElementById("voice-subtitle");
 
-    // ─── SOCKET.IO ───────────────────────────────────────────────
-    console.log("[demo] Connecting to", SERVER_URL);
-    const socket = io(SERVER_URL, {
-      query: { role: "worker-demo" },
-      reconnection: true,
-      reconnectionDelay: 2000,
-      reconnectionDelayMax: 30000
-    });
+    // ─── SESSION JOIN ────────────────────────────────────────────
+    window.joinSession = function () {
+      const input = document.getElementById("session-input");
+      const joinBtn = document.getElementById("join-btn");
+      const joinError = document.getElementById("join-error");
+      const sessionId = input.value.trim();
 
-    socket.on("connect", () => {
-      console.log("[demo] Connected:", socket.id);
-      connDot.className = "status-dot connected";
-      connText.textContent = "Connected (" + socket.id + ")";
-    });
-
-    socket.on("connect_error", (err) => {
-      console.error("[demo] Connection error:", err.message);
-      connDot.className = "status-dot disconnected";
-      connText.textContent = "Error: " + err.message;
-    });
-
-    socket.on("disconnect", (reason) => {
-      console.log("[demo] Disconnected:", reason);
-      connDot.className = "status-dot disconnected";
-      connText.textContent = "Disconnected — " + reason;
-    });
-
-    socket.on("hand:data", (payload) => {
-      packetCount++;
-      const latency = Date.now() - payload.timestamp;
-      latencyDisplay.textContent = "Latency: " + latency + " ms";
-
-      if (!payload.landmarks || payload.landmarks.length < 21) return;
-
-      const id = (payload.hand || "right").toLowerCase();
-      if (!handModels[id]) handModels[id] = new HandModel3D(id);
-
-      const gesture = handModels[id].update(payload.landmarks);
-
-      if (gesture !== lastGesture && gesture !== "None") {
-        lastGesture = gesture;
-        gestureToast.textContent = gesture;
-        gestureToast.classList.add("show");
-        clearTimeout(toastTimer);
-        toastTimer = setTimeout(() => gestureToast.classList.remove("show"), 1500);
-        socket.emit("gesture:detected", { gesture, confidence: 0.85 });
+      if (!sessionId) {
+        joinError.textContent = "Please enter a session ID";
+        joinError.style.display = "block";
+        return;
       }
-      if (gesture === "None") lastGesture = "None";
 
-      gestureDisplay.textContent = gesture;
-      gestureDisplay.className = gesture !== "None" ? "active" : "";
-    });
+      joinBtn.disabled = true;
+      joinBtn.textContent = "Connecting...";
+      joinError.style.display = "none";
+      activeSessionId = sessionId;
+
+      connectToSession(sessionId);
+    };
+
+    function connectToSession(sessionId) {
+      const joinBtn = document.getElementById("join-btn");
+      const joinError = document.getElementById("join-error");
+
+      console.log("[demo] Connecting to", SERVER_URL, "for session", sessionId);
+
+      socket = io(SERVER_URL, {
+        auth: { mode: "demo" },
+        reconnection: true,
+        reconnectionDelay: 2000,
+        reconnectionDelayMax: 30000
+      });
+
+      socket.on("connect", () => {
+        console.log("[demo] Connected:", socket.id);
+        connDot.className = "status-dot connected";
+        connText.textContent = "Connected (" + socket.id + ")";
+        sessionDisplay.textContent = "Session: " + sessionId;
+
+        // Join the session room
+        socket.emit("session:join", { sessionId });
+      });
+
+      socket.on("connect_error", (err) => {
+        console.error("[demo] Connection error:", err.message);
+        connDot.className = "status-dot disconnected";
+        connText.textContent = "Error: " + err.message;
+
+        if (sessionOverlay && !sessionOverlay.classList.contains("hidden")) {
+          joinError.textContent = "Connection failed: " + err.message;
+          joinError.style.display = "block";
+          joinBtn.disabled = false;
+          joinBtn.textContent = "Connect to Session";
+        }
+      });
+
+      socket.on("disconnect", (reason) => {
+        console.log("[demo] Disconnected:", reason);
+        connDot.className = "status-dot disconnected";
+        connText.textContent = "Disconnected — " + reason;
+      });
+
+      // Session joined confirmation — hide the overlay
+      socket.on("error:event", (payload) => {
+        if (payload.event === "session:join") {
+          console.error("[demo] Session join failed:", payload.message);
+          joinError.textContent = payload.message;
+          joinError.style.display = "block";
+          joinBtn.disabled = false;
+          joinBtn.textContent = "Connect to Session";
+        }
+      });
+
+      // When we join successfully, the server sends us into the room
+      // We detect this by NOT getting an error after emitting session:join
+      // Give it a moment for error response, then show the main view
+      socket.on("connect", function onFirstConnect() {
+        socket.off("connect", onFirstConnect);
+        setTimeout(() => {
+          if (socket.connected && sessionOverlay) {
+            sessionOverlay.classList.add("hidden");
+          }
+        }, 1000);
+      });
+
+      socket.on("session:participant-joined", (payload) => {
+        console.log("[demo] Participant joined:", payload.userId);
+      });
+
+      socket.on("session:participant-left", (payload) => {
+        console.log("[demo] Participant left:", payload.userId);
+      });
+
+      socket.on("session:end", () => {
+        console.log("[demo] Session ended by remote");
+        connText.textContent = "Session ended";
+      });
+
+      // ─── HAND DATA ──────────────────────────────────────────────
+      socket.on("hand:data", (payload) => {
+        packetCount++;
+        const latency = Date.now() - payload.timestamp;
+        latencyDisplay.textContent = "Latency: " + latency + " ms";
+
+        if (!payload.landmarks || payload.landmarks.length < 21) return;
+
+        const id = (payload.hand || "right").toLowerCase();
+        if (!handModels[id]) handModels[id] = new HandModel3D(id);
+
+        const gesture = handModels[id].update(payload.landmarks);
+
+        if (gesture !== lastGesture && gesture !== "None") {
+          lastGesture = gesture;
+          gestureToast.textContent = gesture;
+          gestureToast.classList.add("show");
+          clearTimeout(toastTimer);
+          toastTimer = setTimeout(() => gestureToast.classList.remove("show"), 1500);
+          socket.emit("gesture:detected", { gesture, confidence: 0.85, sessionId: activeSessionId });
+        }
+        if (gesture === "None") lastGesture = "None";
+
+        gestureDisplay.textContent = gesture;
+        gestureDisplay.className = gesture !== "None" ? "active" : "";
+      });
+
+      // ─── VOICE TRANSCRIPTS ─────────────────────────────────────
+      socket.on("voice:transcript", (payload) => {
+        if (payload.text && voiceSubtitle) {
+          voiceSubtitle.textContent = payload.text;
+          voiceSubtitle.classList.add("show");
+          clearTimeout(subtitleTimer);
+          subtitleTimer = setTimeout(() => voiceSubtitle.classList.remove("show"), 4000);
+        }
+      });
+
+      // ─── ANNOTATIONS ───────────────────────────────────────────
+      socket.on("annotation:update", (payload) => {
+        console.log("[demo] Annotation received:", payload);
+      });
+    }
 
     // ─── RENDER LOOP ─────────────────────────────────────────────
     let frameCount = 0, lastFpsTime = performance.now();
@@ -481,7 +647,7 @@
       renderer.setSize(w, h);
     });
 
-    console.log("[demo] Scene initialized, waiting for hand data...");
+    console.log("[demo] Scene initialized, waiting for session connection...");
   })();
   </script>
 </body>

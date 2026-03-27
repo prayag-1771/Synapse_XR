@@ -19,5 +19,6 @@ export const env = {
   databaseUrl: requireEnv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/synapse_xr"),
   pgPoolMax: Number(process.env.PG_POOL_MAX ?? 20),
   redisUrl: requireEnv("REDIS_URL", "redis://localhost:6379"),
-  redisGloveTtlSeconds: Number(process.env.REDIS_GLOVE_TTL_SECONDS ?? 120)
+  redisGloveTtlSeconds: Number(process.env.REDIS_GLOVE_TTL_SECONDS ?? 120),
+  allowGuestMode: (process.env.ALLOW_GUEST_MODE ?? "true").toLowerCase() === "true"
 };
