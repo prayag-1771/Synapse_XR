@@ -13,7 +13,7 @@ interface HandPayload {
   type: string;
   source: string;
   hand: string;
-  landmarks: [number, number, number][];
+  landmarks: { x: number; y: number; z: number }[];
   timestamp: number;
 }
 
@@ -73,11 +73,11 @@ export default function HandTracker() {
           type: "hand_data",
           source: "mediapipe",
           hand: handedness.toLowerCase(),
-          landmarks: landmarks.map((lm: LandmarkPoint) => [
-            lm.x,
-            lm.y,
-            lm.z,
-          ]),
+          landmarks: landmarks.map((lm: LandmarkPoint) => ({
+            x: lm.x,
+            y: lm.y,
+            z: lm.z,
+          })),
           timestamp: Date.now(),
         };
 

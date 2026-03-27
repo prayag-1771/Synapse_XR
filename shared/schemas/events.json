@@ -1,14 +1,88 @@
 {
-  "websocket_events": {
-    "hand:data": { "direction": "Expert → Server → Worker", "payload": "Hand landmark packet" },
-    "gesture:detected": { "direction": "Expert → Server → Worker", "payload": "Gesture event" },
-    "voice:transcript": { "direction": "Expert → Server → Worker", "payload": "Voice subtitle" },
-    "annotation:update": { "direction": "Expert → Server → Worker", "payload": "Annotation data" },
-    "ai:detection": { "direction": "Worker → Server → Expert", "payload": "YOLO + Gemini results" },
-    "session:join": { "direction": "Both → Server", "payload": "Session ID + user info" },
-    "session:end": { "direction": "Either → Server → Both", "payload": "Session ended" },
-    "webrtc:offer": { "direction": "Expert ↔ Server ↔ Worker", "payload": "WebRTC SDP offer" },
-    "webrtc:answer": { "direction": "Worker ↔ Server ↔ Expert", "payload": "WebRTC SDP answer" },
-    "webrtc:ice": { "direction": "Both ↔ Server", "payload": "ICE candidates" }
+  "events": {
+    "hand:data": {
+      "direction": "expert->server->worker",
+      "payload": {
+        "type": "hand_data"
+      }
+    },
+
+    "gesture:detected": {
+      "direction": "expert->server->worker",
+      "payload": {
+        "gesture": "string",
+        "confidence": "number"
+      }
+    },
+
+    "voice:transcript": {
+      "direction": "expert->server->worker",
+      "payload": {
+        "text": "string",
+        "timestamp": "number"
+      }
+    },
+
+    "annotation:update": {
+      "direction": "expert->server->worker",
+      "payload": {
+        "text": "string",
+        "x": "number",
+        "y": "number",
+        "timestamp": "number"
+      }
+    },
+
+    "ai:detection": {
+      "direction": "worker->server->expert",
+      "payload": {
+        "objects": [
+          {
+            "label": "string",
+            "confidence": "number",
+            "bbox": [0, 0, 0, 0]
+          }
+        ],
+        "alerts": ["string"]
+      }
+    },
+
+    "session:join": {
+      "direction": "client->server",
+      "payload": {
+        "sessionId": "string",
+        "userId": "string",
+        "role": "expert | worker"
+      }
+    },
+
+    "session:end": {
+      "direction": "client->server->client",
+      "payload": {
+        "sessionId": "string",
+        "reason": "string"
+      }
+    },
+
+    "webrtc:offer": {
+      "direction": "peer->server->peer",
+      "payload": {
+        "sdp": "string"
+      }
+    },
+
+    "webrtc:answer": {
+      "direction": "peer->server->peer",
+      "payload": {
+        "sdp": "string"
+      }
+    },
+
+    "webrtc:ice": {
+      "direction": "peer->server->peer",
+      "payload": {
+        "candidate": "string"
+      }
+    }
   }
 }
