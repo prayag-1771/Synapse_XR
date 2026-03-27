@@ -1,51 +1,98 @@
 using UnityEngine;
 
+/// <summary>
+/// Per-joint smoothing filter with independent per-axis Kalman state.
+/// Z axis uses higher noise values since MediaPipe depth estimation is noisiest.
+/// Phase 2: This class will be swapped with LSTM inference once Sudarsan's model is ready.
+/// </summary>
 public class Smoothing
 {
-    // Per-axis Kalman state — X/Y/Z have different noise profiles (Z is noisiest from MediaPipe)
-    private readonly float[] q = { 0.001f, 0.001f, 0.002f }; // process noise per axis
-    private readonly float[] r = { 0.01f,  0.01f,  0.03f };  // measurement noise per axis (Z higher)
-    private float[] p = { 1f, 1f, 1f };                       // estimation error per axis
-    private float[] k = new float[3];                          // kalman gain per axis
+    // Process noise per axis (how much we expect the hand to move between frames)
+    private readonly float qX, qY, qZ;
+    // Measurement noise per axis (how noisy the sensor reading is)
+    private readonly float rX, rY, rZ;
+
+    // Per-axis estimation error covariance
+    private float pX = 1f, pY = 1f, pZ = 1f;
+    // Per-axis Kalman gain (computed each frame)
+    private float kX, kY, kZ;
+
     private Vector3 estimate;
     private bool initialized = false;
 
-    // Optional EMA for quick blending when Kalman is overkill
+    // Velocity tracking for predictive smoothing
+    private Vector3 lastMeasurement;
+    private Vector3 velocity;
+    private bool hasVelocity = false;
+
+    /// <summary>
+    /// Create a Kalman smoother with per-axis noise tuning.
+    /// Defaults are optimized for MediaPipe hand landmarks.
+    /// </summary>
+    public Smoothing(
+        float processNoiseXY = 0.001f, float processNoiseZ = 0.002f,
+        float measureNoiseXY = 0.01f, float measureNoiseZ = 0.03f)
+    {
+        qX = processNoiseXY; qY = processNoiseXY; qZ = processNoiseZ;
+        rX = measureNoiseXY; rY = measureNoiseXY; rZ = measureNoiseZ;
+    }
+
+    /// <summary>
+    /// Quick exponential moving average blend (useful when Kalman is overkill).
+    /// </summary>
     public static Vector3 EMASmooth(Vector3 prev, Vector3 current, float alpha = 0.3f)
     {
         return alpha * current + (1f - alpha) * prev;
     }
 
+    /// <summary>
+    /// Run one Kalman filter iteration per axis with velocity-assisted prediction.
+    /// </summary>
     public Vector3 KalmanSmooth(Vector3 measurement)
     {
         if (!initialized)
         {
             estimate = measurement;
+            lastMeasurement = measurement;
             initialized = true;
             return estimate;
         }
 
-        Vector3 result;
-
-        // Per-axis predict + update
-        for (int i = 0; i < 3; i++)
+        // Compute velocity for predictive step
+        if (hasVelocity)
         {
-            p[i] += q[i];
-            k[i] = p[i] / (p[i] + r[i]);
-            p[i] *= (1f - k[i]);
+            velocity = EMASmooth(velocity, measurement - lastMeasurement, 0.5f);
         }
+        else
+        {
+            velocity = measurement - lastMeasurement;
+            hasVelocity = true;
+        }
+        lastMeasurement = measurement;
 
-        result.x = estimate.x + k[0] * (measurement.x - estimate.x);
-        result.y = estimate.y + k[1] * (measurement.y - estimate.y);
-        result.z = estimate.z + k[2] * (measurement.z - estimate.z);
+        // Predict step: use velocity to predict where the joint should be
+        Vector3 predicted = estimate + velocity;
 
-        estimate = result;
+        // Per-axis update
+        pX += qX; kX = pX / (pX + rX); pX *= (1f - kX);
+        pY += qY; kY = pY / (pY + rY); pY *= (1f - kY);
+        pZ += qZ; kZ = pZ / (pZ + rZ); pZ *= (1f - kZ);
+
+        estimate.x = predicted.x + kX * (measurement.x - predicted.x);
+        estimate.y = predicted.y + kY * (measurement.y - predicted.y);
+        estimate.z = predicted.z + kZ * (measurement.z - predicted.z);
+
         return estimate;
     }
 
+    /// <summary>
+    /// Reset filter state (e.g. when hand is lost and re-detected).
+    /// </summary>
     public void Reset()
     {
         initialized = false;
-        p = new float[] { 1f, 1f, 1f };
+        hasVelocity = false;
+        pX = pY = pZ = 1f;
+        velocity = Vector3.zero;
     }
 }

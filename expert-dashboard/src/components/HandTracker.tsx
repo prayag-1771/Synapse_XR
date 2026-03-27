@@ -25,6 +25,8 @@ export default function HandTracker() {
   useEffect(() => {
     const socket = io("http://localhost:5000");
     socketRef.current = socket;
+    let lastEmitTime = 0;
+    const EMIT_INTERVAL = 50; // 20fps max emission rate
 
     async function setup() {
       // Dynamically import MediaPipe (no SSR)
@@ -65,23 +67,30 @@ export default function HandTracker() {
         )
           return;
 
-        const landmarks = results.multiHandLandmarks[0];
-        const handedness =
-          results.multiHandedness?.[0]?.label || "Right";
+        // Throttle: only emit at ~20fps to avoid flooding the WebSocket
+        const now = Date.now();
+        if (now - lastEmitTime < EMIT_INTERVAL) return;
+        lastEmitTime = now;
 
-        const payload: HandPayload = {
-          type: "hand_data",
-          source: "mediapipe",
-          hand: handedness.toLowerCase(),
-          landmarks: landmarks.map((lm: LandmarkPoint) => ({
-            x: lm.x,
-            y: lm.y,
-            z: lm.z,
-          })),
-          timestamp: Date.now(),
-        };
+        // Emit a unique packet for each detected hand (Left and Right)
+        for (let i = 0; i < results.multiHandLandmarks.length; i++) {
+          const landmarks = results.multiHandLandmarks[i];
+          const handedness = results.multiHandedness?.[i]?.label || "Right";
 
-        socket.emit("hand:data", payload);
+          const payload: HandPayload = {
+            type: "hand_data",
+            source: "mediapipe",
+            hand: handedness.toLowerCase(),
+            landmarks: landmarks.map((lm: LandmarkPoint) => ({
+              x: lm.x,
+              y: lm.y,
+              z: lm.z,
+            })),
+            timestamp: now,
+          };
+
+          socket.emit("hand:data", payload);
+        }
       });
 
       if (videoRef.current) {

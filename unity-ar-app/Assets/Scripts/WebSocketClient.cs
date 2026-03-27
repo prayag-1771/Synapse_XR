@@ -224,9 +224,9 @@ public class WebSocketClient : MonoBehaviour
         }
     }
 
-    public void SendGesture(string gestureName)
+    public void SendGesture(string gestureName, float confidence = 1.0f)
     {
-        string payload = $"{{\"gesture\":\"{gestureName}\",\"confidence\":1.0}}";
+        string payload = $"{{\"gesture\":\"{gestureName}\",\"confidence\":{confidence:F2}}}";
         SendRaw($"42[\"gesture:detected\",{payload}]");
     }
 
