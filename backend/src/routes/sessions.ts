@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { authMiddleware } from "../middleware/auth";
 import { sessionRepository } from "../repositories/sessionRepository";
+import { sessionEventRepository } from "../repositories/sessionEventRepository";
 import { getLatestGloveState } from "../db/redis";
 import { logger } from "../services/logger";
 
@@ -179,6 +180,84 @@ router.post("/:id/end", authMiddleware, async (req, res) => {
     const status = message.includes("not found") ? 404 : 403;
     res.status(status).json({ error: message });
   }
+});
+
+router.get("/:id/voice", authMiddleware, async (req, res) => {
+  const userId = req.user?.userId;
+  const role = req.user?.role;
+  const sessionId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const session = await sessionRepository.findById(sessionId);
+  if (!session) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  const canAccess = role === "admin" || session.participants.includes(userId) || session.createdBy === userId;
+  if (!canAccess) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  const voiceHistory = await sessionEventRepository.getVoiceHistory(sessionId);
+  res.json({ voiceHistory });
+});
+
+router.get("/:id/annotations", authMiddleware, async (req, res) => {
+  const userId = req.user?.userId;
+  const role = req.user?.role;
+  const sessionId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const session = await sessionRepository.findById(sessionId);
+  if (!session) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  const canAccess = role === "admin" || session.participants.includes(userId) || session.createdBy === userId;
+  if (!canAccess) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  const annotations = await sessionEventRepository.getAnnotations(sessionId);
+  res.json({ annotations });
+});
+
+router.get("/:id/analytics", authMiddleware, async (req, res) => {
+  const userId = req.user?.userId;
+  const role = req.user?.role;
+  const sessionId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const session = await sessionRepository.findById(sessionId);
+  if (!session) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  const canAccess = role === "admin" || session.participants.includes(userId) || session.createdBy === userId;
+  if (!canAccess) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  const analytics = await sessionEventRepository.getAnalytics(sessionId);
+  res.json({ analytics });
 });
 
 export default router;

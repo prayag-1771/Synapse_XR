@@ -2,11 +2,12 @@
 
 ## Overview
 
-The Synapse XR backend uses PostgreSQL for persistent data storage. The schema is split into 4 core tables:
+The Synapse XR backend uses PostgreSQL for persistent data storage. The schema is split into 5 core tables:
 
 - **users**: User authentication and identity
 - **sessions**: Telepresence session metadata
 - **session_participants**: Session membership (many-to-many)
+- **session_events**: Real-time event recording and timeline data
 - **glove_samples**: Optional historical logging of glove position data
 
 ## Tables
@@ -195,6 +196,53 @@ WHERE recorded_at < NOW() - INTERVAL '7 days';
 
 ---
 
+### session_events
+
+Persistent log of key events (voice transcripts, ai detections, step validations, annotations) emitted during a telepresence session. Enables replay, auditing, and analytics.
+
+| Column | Type | Constraints | Description |
+| --- | --- | --- | --- |
+| `id` | BIGSERIAL | PRIMARY KEY | Auto-incrementing event ID |
+| `session_id` | UUID | NOT NULL, FK→sessions(id), ON DELETE CASCADE | Session reference |
+| `event_type` | TEXT | NOT NULL | Type of event (e.g. `ai:detection`, `voice:transcript`) |
+| `user_id` | TEXT | NULLABLE | ID of the user who triggered the event, if applicable |
+| `payload` | JSONB | NOT NULL, DEFAULT '{}' | Event payload data |
+| `created_at` | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Event timestamp (UTC) |
+
+**Indexes:**
+
+- Primary key index on `id` (automatic)
+- Index on `session_id` (for fast filtering by session)
+- Composite index on `(session_id, event_type)` (for fetching specific histories)
+- Composite index on `(session_id, created_at)` (for retrieving timelines)
+
+**Constraints:**
+
+- Foreign key on `session_id` → `sessions(id)`
+- Cascading deletes: removing session removes all events
+
+**Example:**
+
+```sql
+-- Log a voice transcript event
+INSERT INTO session_events (session_id, event_type, user_id, payload)
+VALUES (
+  '660e8400-e29b-41d4-a716-446655440001',
+  'voice:transcript',
+  '550e8400-e29b-41d4-a716-446655440000',
+  '{"text": "Move the relay slightly left", "timestamp": 1234567890}'::jsonb
+);
+
+-- Query AI step validation events
+SELECT payload, created_at
+FROM session_events
+WHERE session_id = '660e8400-e29b-41d4-a716-446655440001'
+  AND event_type = 'ai:step-validation'
+ORDER BY created_at ASC;
+```
+
+---
+
 ## Relationships Diagram
 
 ```md
@@ -223,7 +271,20 @@ WHERE recorded_at < NOW() - INTERVAL '7 days';
         │                   │
         └────────┬──────────┘
                  │
-          session_id (FK)
+              session_id (FK)
+                 │
+        ┌────────┴──────────────────┐
+        │                           │
+        │    session_events         │
+        │    ├─ id (PK, BIGSERIAL)  │
+        │    ├─ session_id (FK)     │
+        │    ├─ event_type          │
+        │    ├─ user_id             │
+        │    ├─ payload (JSONB)     │
+        │    └─ created_at          │
+        │                           │
+        └───────────────────────────┘
+                 │
                  │
         ┌────────▼──────────────────┐
         │                           │
@@ -333,6 +394,7 @@ WHERE session_id = $1;
 | 001 | 2026-03-27 | Initial schema: users, sessions, session_participants, glove_samples with indexes |
 | 002 | 2026-03-27 | Added users.role with role check and index |
 | 003 | 2026-03-27 | Normalized status constraint to active/ended and migrated open->active if present |
+| 004 | 2026-03-28 | Added session_events for persistence of socket events |
 
 To apply migrations:
 
@@ -340,4 +402,5 @@ To apply migrations:
 psql $DATABASE_URL -f db/migrations/001_init.sql
 psql $DATABASE_URL -f db/migrations/002_add_user_role.sql
 psql $DATABASE_URL -f db/migrations/003_expand_session_status.sql
+psql $DATABASE_URL -f db/migrations/004_session_events.sql
 ```
