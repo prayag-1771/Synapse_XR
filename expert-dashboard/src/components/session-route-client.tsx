@@ -261,10 +261,14 @@ export default function SessionRouteClient({ sessionId }: SessionRouteClientProp
   // AR View refs
   const arVideoRef = useRef<HTMLVideoElement | null>(null);
   const arCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const arVideoRefRight = useRef<HTMLVideoElement | null>(null);
+  const arCanvasRefRight = useRef<HTMLCanvasElement | null>(null);
   const handLandmarksRef = useRef<Map<string, LandmarkPoint[]>>(new Map());
   const handTimestampsRef = useRef<Map<string, number>>(new Map());
   const detectionsRef = useRef<DetectedObject[]>([]);
   const [hasARVideo, setHasARVideo] = useState(false);
+  const [isVrMode, setIsVrMode] = useState(false);
+  const arContainerRef = useRef<HTMLElement | null>(null);
 
   const isExpert = user?.role === "expert";
   const isWorker = user?.role === "worker";
@@ -379,16 +383,21 @@ export default function SessionRouteClient({ sessionId }: SessionRouteClientProp
         video: {
           width: { ideal: 1280 },
           height: { ideal: 720 },
-          frameRate: { ideal: 30, max: 30 }
+          frameRate: { ideal: 30, max: 30 },
+          facingMode: { ideal: "environment" }
         },
         audio: true
       },
       {
-        video: true,
+        video: {
+          facingMode: { ideal: "environment" }
+        },
         audio: true
       },
       {
-        video: true,
+        video: {
+          facingMode: { ideal: "environment" }
+        },
         audio: false
       }
     ];
@@ -840,6 +849,60 @@ export default function SessionRouteClient({ sessionId }: SessionRouteClientProp
     };
   }, [stopLocalMedia, stopPeerConnection]);
 
+  const toggleVRFullscreen = async () => {
+    if (!document.fullscreenElement) {
+      if (arContainerRef.current?.requestFullscreen) {
+        try {
+          await arContainerRef.current.requestFullscreen();
+        } catch (e) {
+          console.warn("Fullscreen error", e);
+        }
+      }
+      setIsVrMode(true);
+      if ((window.screen?.orientation as any)?.lock) {
+        try {
+          await (window.screen.orientation as any).lock("landscape");
+        } catch (e) {
+          console.warn("Orientation lock error", e);
+        }
+      }
+    } else {
+      if (document.exitFullscreen) {
+        try {
+          await document.exitFullscreen();
+        } catch (e) {
+          console.warn("Exit fullscreen error", e);
+        }
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        setIsVrMode(false);
+        if ((window.screen?.orientation as any)?.unlock) {
+          try {
+            (window.screen.orientation as any).unlock();
+          } catch(e) {}
+        }
+      }
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
+  // Sync right video feed in VR mode
+  useEffect(() => {
+    if (isVrMode && arVideoRefRight.current && arVideoRef.current) {
+      if (arVideoRefRight.current.srcObject !== arVideoRef.current.srcObject) {
+        arVideoRefRight.current.srcObject = arVideoRef.current.srcObject;
+      }
+    } else if (!isVrMode && arVideoRefRight.current) {
+      arVideoRefRight.current.srcObject = null;
+    }
+  }, [isVrMode, hasARVideo]);
+
   // Expert: callback from HandTracker — update overlay landmarks immediately
   const handleLandmarks = useCallback((landmarks: LandmarkPoint[], hand: string) => {
     handLandmarksRef.current.set(hand, landmarks);
@@ -869,6 +932,19 @@ export default function SessionRouteClient({ sessionId }: SessionRouteClientProp
         const ctx = canvas.getContext("2d");
         if (ctx) {
           renderAROverlay(ctx, handLandmarksRef.current, detectionsRef.current, canvas.width, canvas.height);
+        }
+
+        const canvasRight = arCanvasRefRight.current;
+        const videoRight = arVideoRefRight.current;
+        if (canvasRight && videoRight && videoRight.videoWidth > 0) {
+          if (canvasRight.width !== videoRight.videoWidth || canvasRight.height !== videoRight.videoHeight) {
+            canvasRight.width = videoRight.videoWidth;
+            canvasRight.height = videoRight.videoHeight;
+          }
+          const ctxRight = canvasRight.getContext("2d");
+          if (ctxRight) {
+             renderAROverlay(ctxRight, handLandmarksRef.current, detectionsRef.current, canvasRight.width, canvasRight.height);
+          }
         }
       }
       animId = requestAnimationFrame(render);
@@ -1092,26 +1168,88 @@ export default function SessionRouteClient({ sessionId }: SessionRouteClientProp
       </section>
 
       {/* ═══ LIVE AR VIEW ═══ */}
-      <section className="rounded-2xl overflow-hidden border border-black/10 bg-black">
-        <div className="relative w-full" style={{ aspectRatio: "16/9" }}>
-          {/* Primary video: worker camera (local for worker, remote for expert) */}
-          <video
-            ref={arVideoRef}
-            autoPlay
-            playsInline
-            muted={isWorker}
-            className="absolute inset-0 w-full h-full object-cover"
-          />
+      <section ref={arContainerRef} className={`rounded-2xl overflow-hidden border border-black/10 bg-black ${isVrMode ? "border-none rounded-none" : ""}`}>
+        <div className={`relative w-full ${isVrMode ? "flex h-screen items-center justify-center gap-[6px] md:gap-2 bg-black px-2 md:px-6" : ""}`} style={{ aspectRatio: isVrMode ? "auto" : "16/9", minHeight: isVrMode ? "100vh" : "" }}>
+          
+          {/* VR Middle alignment line */}
+          {isVrMode && (
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[2px] h-[30vh] bg-white/70 z-50 pointer-events-none rounded-t-full" />
+          )}
 
-          {/* Hand overlay canvas */}
-          <canvas
-            ref={arCanvasRef}
-            className="absolute inset-0 w-full h-full pointer-events-none"
-          />
+          <div className={`relative ${isVrMode ? "flex-1 aspect-[4/3] max-h-[95vh] max-w-[48vw] overflow-hidden rounded-[15%]" : "w-full h-full"}`}>
+            {/* Primary video: worker camera (local for worker, remote for expert) */}
+            <video
+              ref={arVideoRef}
+              autoPlay
+              playsInline
+              muted={isWorker}
+              className={`absolute inset-0 w-full h-full object-cover origin-center ${isVrMode ? "scale-[1.15] translate-x-[5%]" : ""}`}
+            />
+            {/* Hand overlay canvas */}
+            <canvas
+              ref={arCanvasRef}
+              className={`absolute inset-0 w-full h-full pointer-events-none origin-center ${isVrMode ? "scale-[1.15] translate-x-[5%]" : ""}`}
+            />
+            {/* Left Eye Vignette/Fishbowl Overlay */}
+            {isVrMode && (
+              <div 
+                className="absolute inset-0 z-10 pointer-events-none shadow-[inset_0_0_40px_rgba(0,0,0,1)]" 
+                style={{ background: 'radial-gradient(ellipse, transparent 40%, rgba(0,0,0,0.85) 75%, black 100%)' }} 
+              />
+            )}
+          </div>
+
+          {/* Right VR eye */}
+          {isVrMode && (
+            <div className="relative flex-1 aspect-[4/3] max-h-[95vh] max-w-[48vw] overflow-hidden rounded-[15%]">
+              <video
+                ref={arVideoRefRight}
+                autoPlay
+                playsInline
+                muted={isWorker}
+                className="absolute inset-0 w-full h-full object-cover origin-center scale-[1.15] -translate-x-[5%]"
+              />
+              <canvas
+                ref={arCanvasRefRight}
+                className="absolute inset-0 w-full h-full pointer-events-none origin-center scale-[1.15] -translate-x-[5%]"
+              />
+              <div 
+                className="absolute inset-0 z-10 pointer-events-none shadow-[inset_0_0_40px_rgba(0,0,0,1)]" 
+                style={{ background: 'radial-gradient(ellipse, transparent 40%, rgba(0,0,0,0.85) 75%, black 100%)' }} 
+              />
+            </div>
+          )}
 
           {/* Hidden video refs for WebRTC wiring */}
           <video ref={localVideoRef} autoPlay muted playsInline className="hidden" />
           <video ref={remoteVideoRef} autoPlay playsInline className="hidden" />
+
+          {/* VR Overlay Controls */}
+          {isVrMode && (
+            <>
+              {/* Close VR button */}
+              <button 
+                onClick={toggleVRFullscreen} 
+                className="absolute top-4 left-4 z-50 w-10 h-10 flex items-center justify-center text-white/80 hover:text-white transition-colors"
+                title="Exit VR"
+              >
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+
+              {/* Settings button */}
+              <button 
+                className="absolute top-4 right-4 z-50 w-10 h-10 flex items-center justify-center text-white/80 hover:text-white transition-colors"
+                title="VR Settings"
+              >
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              </button>
+            </>
+          )}
 
           {/* Expert's hand tracking PiP */}
           {isHandTrackingActive && isExpert && socketRef.current && (
@@ -1161,15 +1299,23 @@ export default function SessionRouteClient({ sessionId }: SessionRouteClientProp
         </div>
 
         {/* Control bar */}
-        <div className="flex items-center gap-3 px-4 py-3 bg-zinc-950">
+        <div className={`flex flex-wrap items-center gap-2 md:gap-3 px-3 md:px-4 py-3 bg-zinc-950 ${isVrMode ? "hidden" : ""}`}>
           {isWorker && (
-            <button
-              className="rounded-lg bg-cyan-500 px-4 py-2 text-xs font-semibold text-black transition hover:bg-cyan-400 disabled:opacity-50"
-              onClick={runStartWorkerCamera}
-              disabled={Boolean(isBusy || hasARVideo)}
-            >
-              {hasARVideo ? "Camera Active" : "Start Camera"}
-            </button>
+            <>
+              <button
+                className="rounded-lg bg-cyan-500 px-3 md:px-4 py-2 text-xs font-semibold text-black transition hover:bg-cyan-400 disabled:opacity-50 flex-1 md:flex-none"
+                onClick={runStartWorkerCamera}
+                disabled={Boolean(isBusy || hasARVideo)}
+              >
+                {hasARVideo ? "Camera Active" : "Start Camera"}
+              </button>
+              <button
+                className="rounded-lg bg-zinc-800 text-white hover:bg-zinc-700 px-3 md:px-4 py-2 text-xs font-semibold transition flex-1 md:flex-none"
+                onClick={toggleVRFullscreen}
+              >
+                Enter VR Fullscreen
+              </button>
+            </>
           )}
           {isExpert && (
             <button
