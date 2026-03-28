@@ -47,6 +47,7 @@ const relayedEvents = [
   "voice:transcript",
   "annotation:update",
   "ai:detection",
+  "ai:step-validation",
   "webrtc:offer",
   "webrtc:answer",
   "webrtc:ice"

@@ -47,6 +47,22 @@
       }
     },
 
+    "ai:step-validation": {
+      "direction": "worker->server->expert",
+      "payload": {
+        "currentStep": "number",
+        "passed": "boolean",
+        "message": "string",
+        "detectedCounts": {
+          "plc": "number",
+          "relay": "number",
+          "motor": "number",
+          "push_button": "number",
+          "wire": "number"
+        }
+      }
+    },
+
     "session:join": {
       "direction": "client->server",
       "payload": {

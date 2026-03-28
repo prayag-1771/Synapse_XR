@@ -1,0 +1,5 @@
+plc
+relay
+motor
+push_button
+wire

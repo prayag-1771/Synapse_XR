@@ -1,0 +1,6 @@
+path: .
+train: .
+val: .
+
+nc: 5
+names: ['plc', 'relay', 'motor', 'push_button', 'wire']
