@@ -200,4 +200,51 @@ function drawMiniLandmarks(ctx: CanvasRenderingContext2D, landmarks: LandmarkPoi
     ctx.arc(lm.x * w, lm.y * h, 2, 0, Math.PI * 2);
     ctx.fill();
   }
+
+  // --- Length Detection Feature (Thumb to Index Point) ---
+  if (landmarks[4] && landmarks[8]) {
+    const thumbX = landmarks[4].x * w;
+    const thumbY = landmarks[4].y * h;
+    const indexX = landmarks[8].x * w;
+    const indexY = landmarks[8].y * h;
+
+    // Calculate distance in pixels
+    const dx = indexX - thumbX;
+    const dy = indexY - thumbY;
+    const pixelDistance = Math.sqrt(dx * dx + dy * dy);
+
+    // Hardcode a scale: ~0.15 cm per pixel in this specific view/resolution
+    // This is an arbitrary hardcoded value as requested
+    const measuredLengthCm = (pixelDistance * 0.15).toFixed(1);
+
+    // Calculate angle in degrees
+    // We adjust by putting index relative to thumb and calculating atan2
+    let angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+    // Normalize to 0-360 for display, or just show absolute depending on need. 
+    // Absolute angle from horizontal is fine:
+    angleDeg = Math.abs(angleDeg);
+
+    // Draw a prominent dashed measurement line
+    ctx.strokeStyle = "#ffeb3b"; // Bright yellow
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.moveTo(thumbX, thumbY);
+    ctx.lineTo(indexX, indexY);
+    ctx.stroke();
+    ctx.setLineDash([]); // Reset dash
+
+    // Draw the measurement text label
+    const labelText = `${measuredLengthCm} cm, ${angleDeg.toFixed(1)}°`;
+    ctx.font = "bold 14px monospace";
+    const textMetrics = ctx.measureText(labelText);
+    const textW = textMetrics.width;
+    const midX = (thumbX + indexX) / 2;
+    const midY = (thumbY + indexY) / 2;
+
+    ctx.fillStyle = "#222";
+    ctx.fillRect(midX + 5, midY - 15, textW + 10, 20);
+    ctx.fillStyle = "#ffeb3b";
+    ctx.fillText(labelText, midX + 10, midY);
+  }
 }

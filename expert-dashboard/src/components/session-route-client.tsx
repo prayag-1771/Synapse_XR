@@ -127,6 +127,43 @@ function renderAROverlay(
       ctx.fillStyle = isTip ? "#ffffff" : color;
       ctx.fill();
     }
+
+    // --- Length & Angle Detection Feature (Thumb to Index Point) ---
+    if (landmarks[4] && landmarks[8]) {
+      const thumbX = landmarks[4].x * w;
+      const thumbY = landmarks[4].y * h;
+      const indexX = landmarks[8].x * w;
+      const indexY = landmarks[8].y * h;
+
+      const dx = indexX - thumbX;
+      const dy = indexY - thumbY;
+      const pixelDistance = Math.sqrt(dx * dx + dy * dy);
+
+      const measuredLengthCm = (pixelDistance * 0.15).toFixed(1);
+      const angleDeg = Math.abs((Math.atan2(dy, dx) * 180) / Math.PI);
+
+      ctx.strokeStyle = "#ffeb3b";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(thumbX, thumbY);
+      ctx.lineTo(indexX, indexY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      const labelText = `${measuredLengthCm} cm, ${angleDeg.toFixed(1)}°`;
+      ctx.font = "bold 14px monospace";
+      const textMetrics = ctx.measureText(labelText);
+      const textW = textMetrics.width;
+      const midX = (thumbX + indexX) / 2;
+      const midY = (thumbY + indexY) / 2;
+
+      ctx.fillStyle = "#222";
+      ctx.fillRect(midX + 5, midY - 15, textW + 10, 20);
+      ctx.fillStyle = "#ffeb3b";
+      ctx.fillText(labelText, midX + 10, midY);
+    }
+
     ctx.restore();
   }
 
@@ -948,6 +985,10 @@ export default function SessionRouteClient({ sessionId }: SessionRouteClientProp
     handTimestampsRef.current.set(hand, Date.now());
   }, []);
 
+  const handleHandData = useCallback(() => {
+    setHandEmitCount((c) => c + 1);
+  }, []);
+
   // RAF render loop for AR canvas overlay (hands + YOLO bounding boxes)
   useEffect(() => {
     let animId: number;
@@ -1287,7 +1328,7 @@ export default function SessionRouteClient({ sessionId }: SessionRouteClientProp
                 socket={socketRef.current}
                 sessionId={sessionId}
                 onLandmarks={handleLandmarks}
-                onHandData={() => setHandEmitCount((c) => c + 1)}
+                onHandData={handleHandData}
                 onStatusChange={setHandTrackingStatus}
                 showPreview={true}
               />
