@@ -8,6 +8,7 @@ import {
   subscribeToRealtimeChannel
 } from "../db/redis";
 import { sessionRepository } from "../repositories/sessionRepository";
+import { sessionEventRepository } from "../repositories/sessionEventRepository";
 import { authService } from "./authService";
 import { logger } from "./logger";
 
@@ -54,6 +55,42 @@ const relayedEvents = [
 ] as const;
 
 const getSessionRoom = (sessionId: string): string => `session:${sessionId}`;
+
+// Events that are persisted to PostgreSQL for session recording/replay.
+// WebRTC signaling is excluded (transient). hand:data is batched separately.
+const recordedEvents = new Set([
+  "voice:transcript",
+  "annotation:update",
+  "ai:detection",
+  "ai:step-validation",
+  "gesture:detected"
+]);
+
+// Buffer for hand:data events — flushed periodically to avoid per-frame DB writes
+const handDataBuffer: { sessionId: string; userId: string | null; payload: unknown }[] = [];
+const HAND_DATA_FLUSH_INTERVAL_MS = 5000;
+const HAND_DATA_SAMPLE_RATE = 10; // record 1 in every N hand:data frames
+let handDataFrameCounter = 0;
+
+const flushHandDataBuffer = (): void => {
+  if (handDataBuffer.length === 0) return;
+  const batch = handDataBuffer.splice(0, handDataBuffer.length);
+  void sessionEventRepository.insertBatch(
+    batch.map((item) => ({
+      sessionId: item.sessionId,
+      eventType: "hand:data",
+      userId: item.userId,
+      payload: item.payload,
+    }))
+  ).catch((error) => {
+    logger.error("hand_data_batch_flush_failed", {
+      count: batch.length,
+      error: error instanceof Error ? error.message : "Unknown flush error",
+    });
+  });
+};
+
+setInterval(flushHandDataBuffer, HAND_DATA_FLUSH_INTERVAL_MS);
 
 const getSocketIdentity = (socket: Socket): SocketIdentity | null => {
   const userId = socket.data.userId as string | undefined;
@@ -266,6 +303,24 @@ const registerRelayEvents = (socket: Socket): void => {
       }
 
       socket.to(getSessionRoom(sessionId)).emit(eventName, payload);
+
+      // Persist events for session recording
+      if (recordedEvents.has(eventName)) {
+        void sessionEventRepository.insert(
+          sessionId,
+          eventName,
+          identity.userId,
+          payload as Record<string, unknown>
+        );
+      }
+
+      // Sample hand:data for analytics (1 in N frames, batch-flushed)
+      if (eventName === "hand:data") {
+        handDataFrameCounter++;
+        if (handDataFrameCounter % HAND_DATA_SAMPLE_RATE === 0) {
+          handDataBuffer.push({ sessionId, userId: identity.userId, payload });
+        }
+      }
 
       if (eventName === "hand:data") {
         void setLatestGloveState(sessionId, payload).catch((error) => {

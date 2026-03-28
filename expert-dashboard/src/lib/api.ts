@@ -50,6 +50,35 @@ interface AdminSessionsResponse {
   sessions: Session[];
 }
 
+interface SessionEvent {
+  id: string;
+  sessionId: string;
+  eventType: string;
+  userId: string | null;
+  payload: Record<string, unknown>;
+  createdAt: string;
+}
+
+interface AnalyticsResponse {
+  analytics: {
+    sessionId: string;
+    totalEvents: number;
+    durationSeconds: number | null;
+    eventCounts: Record<string, number>;
+    handPacketsTotal: number;
+    aiDetectionFrames: number;
+    voiceTranscripts: number;
+    annotations: number;
+    firstEventAt: string | null;
+    lastEventAt: string | null;
+  };
+}
+
+interface EventsResponse {
+  voiceHistory?: SessionEvent[];
+  annotations?: SessionEvent[];
+}
+
 export const backendHttpBaseUrl = (process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:3000").replace(/\/$/, "");
 export const backendWsBaseUrl = (process.env.NEXT_PUBLIC_BACKEND_WS_URL ?? backendHttpBaseUrl).replace(/\/$/, "");
 
@@ -140,6 +169,21 @@ export const api = {
 
   getLatestGlove: (sessionId: string, token: string): Promise<LatestGloveResponse> =>
     apiRequest<LatestGloveResponse>(`/sessions/${sessionId}/glove/latest`, {
+      token
+    }),
+
+  getAnalytics: (sessionId: string, token: string): Promise<AnalyticsResponse> =>
+    apiRequest<AnalyticsResponse>(`/sessions/${sessionId}/analytics`, {
+      token
+    }),
+
+  getVoiceHistory: (sessionId: string, token: string): Promise<EventsResponse> =>
+    apiRequest<EventsResponse>(`/sessions/${sessionId}/voice`, {
+      token
+    }),
+
+  getAnnotations: (sessionId: string, token: string): Promise<EventsResponse> =>
+    apiRequest<EventsResponse>(`/sessions/${sessionId}/annotations`, {
       token
     }),
 
