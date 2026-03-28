@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Synapse XR - Worker Demo</title>
+  <title>Synapse XR - Worker Demo (AI)</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -56,6 +56,23 @@
     #gesture-display.active { color: #76ff03; text-shadow: 0 0 24px rgba(118,255,3,0.5); }
     #fps-display, #latency-display, #packet-count { font-size: 12px; color: #666; font-family: monospace; }
     #session-display { font-size: 11px; color: #888; font-family: monospace; word-break: break-all; }
+    /* AI alignment badge — top center */
+    #ai-panel {
+      position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
+      background: rgba(10,10,20,0.8); backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.08); border-radius: 12px;
+      padding: 12px 20px; text-align: center; min-width: 200px;
+      pointer-events: none; z-index: 10;
+    }
+    #ai-score { font-size: 28px; font-weight: 700; color: #00e676; transition: color 0.3s; }
+    #ai-bar { width: 100%; height: 5px; background: rgba(255,255,255,0.1);
+      border-radius: 3px; overflow: hidden; margin: 6px 0 4px; }
+    #ai-bar-fill { height: 100%; width: 0%; border-radius: 3px;
+      background: linear-gradient(90deg, #ff1744, #ffea00, #00e676);
+      transition: width 0.35s ease; }
+    #ai-msg { font-size: 12px; color: #aaa; }
+    #ai-label { font-size: 10px; color: #555; text-transform: uppercase;
+      letter-spacing: 0.5px; margin-bottom: 4px; }
     #gesture-toast {
       position: absolute; bottom: 80px; left: 50%;
       transform: translateX(-50%) translateY(20px);
@@ -168,6 +185,14 @@
       <div id="packet-count">Packets: 0</div>
     </div>
   </div>
+  <!-- AI Alignment Panel -->
+  <div id="ai-panel">
+    <div id="ai-label">AI Hand Alignment</div>
+    <div id="ai-score">--</div>
+    <div id="ai-bar"><div id="ai-bar-fill"></div></div>
+    <div id="ai-msg">Track your hand to begin</div>
+  </div>
+
   <div id="gesture-toast"></div>
   <div id="voice-subtitle"></div>
   <div id="bottom-bar">
@@ -175,9 +200,11 @@
   </div>
   <div id="error-banner"></div>
 
-  <!-- Dependencies: Socket.IO + Three.js (global UMD builds, no modules needed) -->
+  <!-- Dependencies: Socket.IO + Three.js + MediaPipe Hands (client-side AI) -->
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js" crossorigin="anonymous"></script>
 
   <script>
   // ════════════════════════════════════════════════════════════════
@@ -322,6 +349,68 @@
       }
     }
 
+    // ─── AI: ALIGNMENT ANALYZER ──────────────────────────────────
+    // Client-side port of ai_model2/src/error_detection.py
+    // Normalizes landmarks to a wrist-relative, unit-scale space,
+    // then computes mean joint error across all 21 hand landmarks.
+    const aiScore = document.getElementById("ai-score");
+    const aiBarFill = document.getElementById("ai-bar-fill");
+    const aiMsg = document.getElementById("ai-msg");
+
+    function normalizeLandmarks(lm) {
+      const w = lm[0], pivot = lm[9];
+      const scale = Math.hypot(pivot.x - w.x, pivot.y - w.y, pivot.z - w.z) || 1;
+      return lm.map(p => ({ x:(p.x-w.x)/scale, y:(p.y-w.y)/scale, z:(p.z-w.z)/scale }));
+    }
+
+    function computeAlignment(expertLm, workerLm) {
+      if (!expertLm || !workerLm) return null;
+      const en = normalizeLandmarks(expertLm);
+      const wn = normalizeLandmarks(workerLm);
+      let total = 0;
+      for (let i = 0; i < 21; i++) {
+        total += Math.hypot(en[i].x - wn[i].x, en[i].y - wn[i].y, en[i].z - wn[i].z);
+      }
+      // error 0 → 100%, threshold ~0.4 → 0% (tuned to normalized space)
+      return Math.max(0, Math.round((1 - (total / 21) / 0.4) * 100));
+    }
+
+    // Per-joint alignment colors for the Three.js hand (red→green)
+    function jointColors(expertLm, workerLm) {
+      if (!expertLm || !workerLm) return null;
+      const en = normalizeLandmarks(expertLm);
+      const wn = normalizeLandmarks(workerLm);
+      return en.map((ep, i) => {
+        const err = Math.hypot(ep.x - wn[i].x, ep.y - wn[i].y, ep.z - wn[i].z);
+        const s = Math.max(0, 1 - err / 0.6); // 0=red, 1=green
+        return new THREE.Color(s < 0.5 ? 1 : 2*(1-s), s > 0.5 ? 1 : 2*s, 0.05);
+      });
+    }
+
+    let smoothedScore = null;
+    function updateAIPanel(pct) {
+      if (pct === null) {
+        aiScore.textContent = "--"; aiScore.style.color = "#666";
+        aiBarFill.style.width = "0%"; aiMsg.textContent = "Point camera at your hand";
+        return;
+      }
+      // EMA smooth
+      smoothedScore = smoothedScore === null ? pct : Math.round(0.2*pct + 0.8*smoothedScore);
+      aiBarFill.style.width = smoothedScore + "%";
+      aiScore.textContent = smoothedScore + "%";
+      if (smoothedScore >= 80) {
+        aiScore.style.color = "#00e676"; aiMsg.textContent = "Great alignment!";
+      } else if (smoothedScore >= 55) {
+        aiScore.style.color = "#ffea00"; aiMsg.textContent = "Adjust hand position";
+      } else {
+        aiScore.style.color = "#ff5252"; aiMsg.textContent = "Mirror the expert hand";
+      }
+    }
+
+    // Worker hand: tracked by MediaPipe (green, drawn as a second model)
+    let workerHandModel = null;
+    let workerLandmarks = null;
+
     // ─── WEBCAM (worker's camera view) ─────────────────────────
     const video = document.getElementById("camera-feed");
     navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: 1280, height: 720 } })
@@ -332,6 +421,41 @@
           .then(stream => { video.srcObject = stream; })
           .catch(err => console.warn("[demo] No camera:", err.message));
       });
+
+    // ─── MEDIAPIPE HANDS — Worker's own hand ─────────────────────
+    // Starts after video is playing. Falls back silently if CDN fails.
+    function startMediaPipe() {
+      if (typeof Hands === "undefined") {
+        console.warn("[demo] MediaPipe not available — worker hand tracking off");
+        return;
+      }
+      const hands = new Hands({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${f}` });
+      hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.65, minTrackingConfidence: 0.5 });
+
+      hands.onResults(results => {
+        if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+          workerLandmarks = results.multiHandLandmarks[0];
+          if (!workerHandModel) workerHandModel = new WorkerHandModel();
+          workerHandModel.update(workerLandmarks);
+        } else {
+          workerLandmarks = null;
+          if (workerHandModel) { workerHandModel.dispose(); workerHandModel = null; }
+          updateAIPanel(null);
+        }
+      });
+
+      // Use MediaPipe Camera util if available, otherwise manual frame loop
+      if (typeof Camera !== "undefined") {
+        new Camera(video, { onFrame: async () => { await hands.send({ image: video }); }, width: 640, height: 480 }).start();
+      } else {
+        (async function loop() {
+          if (video.readyState >= 2) await hands.send({ image: video });
+          requestAnimationFrame(loop);
+        })();
+      }
+      console.log("[demo] MediaPipe Hands started");
+    }
+    video.addEventListener("loadeddata", startMediaPipe, { once: true });
 
     // ─── THREE.JS SCENE (transparent overlay on camera) ─────────
     const container = document.getElementById("canvas-container");
@@ -367,19 +491,22 @@
         this.gestureDetector = new GestureDetector();
         this.lastUpdate = performance.now();
 
-        // AR-style glowing materials
+        // AR-style glowing materials — per-joint so AI can color each one
         const color = handId === "left" ? 0x00e5ff : 0x00ff88;
-        const jointMat = new THREE.MeshBasicMaterial({color, transparent:true, opacity:0.85});
-        const tipMat = new THREE.MeshBasicMaterial({color:0xffffff, transparent:true, opacity:0.95});
+        this.baseColor = color;
         this.boneMat = new THREE.MeshBasicMaterial({color, transparent:true, opacity:0.7});
         this.palmMat = new THREE.MeshBasicMaterial({color, transparent:true, opacity:0.2, side:THREE.DoubleSide});
 
-        // Joint spheres
+        // Joint spheres — each gets its own material for per-joint AI coloring
         this.jointMeshes = [];
         const sphereGeo = new THREE.SphereGeometry(1, 16, 12);
         for (let i = 0; i < 21; i++) {
           const isTip = FINGERTIP_INDICES.includes(i);
-          const mesh = new THREE.Mesh(sphereGeo, isTip ? tipMat : jointMat);
+          const mat = new THREE.MeshBasicMaterial({
+            color: isTip ? 0xffffff : color, transparent:true,
+            opacity: isTip ? 0.95 : 0.85
+          });
+          const mesh = new THREE.Mesh(sphereGeo, mat);
           mesh.scale.setScalar(isTip ? JOINT_RADIUS*1.3 : JOINT_RADIUS);
           mesh.castShadow = true;
           this.group.add(mesh);
@@ -453,6 +580,69 @@
           if (obj.geometry) obj.geometry.dispose();
           if (obj.material) obj.material.dispose();
         });
+      }
+    }
+
+    // ─── WORKER HAND (MediaPipe) ──────────────────────────────────
+    // Green, slightly smaller, drawn behind the expert hand overlay.
+    class WorkerHandModel {
+      constructor() {
+        this.group = new THREE.Group();
+        this.group.renderOrder = 0;
+        scene.add(this.group);
+        this.smoothers = Array.from({length:21}, () => new KalmanSmoother());
+        this.positions = new Array(21).fill(null);
+        this.jointMats = [];
+
+        const color = 0x76ff03;
+        this.boneMat = new THREE.MeshBasicMaterial({color, transparent:true, opacity:0.5});
+        const sphereGeo = new THREE.SphereGeometry(1, 12, 8);
+        for (let i = 0; i < 21; i++) {
+          const mat = new THREE.MeshBasicMaterial({color, transparent:true, opacity:0.65});
+          this.jointMats.push(mat);
+          const mesh = new THREE.Mesh(sphereGeo, mat);
+          mesh.scale.setScalar(FINGERTIP_INDICES.includes(i) ? JOINT_RADIUS : JOINT_RADIUS * 0.8);
+          this.group.add(mesh);
+        }
+        const cylGeo = new THREE.CylinderGeometry(1,1,1,6);
+        cylGeo.translate(0,0.5,0);
+        this.boneMeshes = [];
+        for (let i = 0; i < BONE_CONNECTIONS.length; i++) {
+          const mesh = new THREE.Mesh(cylGeo, this.boneMat);
+          this.group.add(mesh);
+          this.boneMeshes.push(mesh);
+        }
+      }
+
+      update(landmarks) {
+        const sw = window.innerWidth, sh = window.innerHeight;
+        for (let i = 0; i < 21; i++) {
+          const raw = { x: landmarks[i].x * sw, y: -landmarks[i].y * sh, z: landmarks[i].z * sw * 0.5 };
+          const s = this.smoothers[i].smooth(raw);
+          this.positions[i] = s;
+          this.group.children[i].position.set(s.x, s.y, s.z);
+        }
+        for (let i = 0; i < BONE_CONNECTIONS.length; i++) {
+          const [a, b] = BONE_CONNECTIONS[i];
+          const from = this.positions[a], to = this.positions[b];
+          const dx = to.x-from.x, dy = to.y-from.y, dz = to.z-from.z;
+          const len = Math.sqrt(dx*dx+dy*dy+dz*dz);
+          if (len < 0.001) continue;
+          const mesh = this.boneMeshes[i];
+          mesh.position.set(from.x, from.y, from.z);
+          mesh.scale.set(BONE_WIDTH*0.7, len, BONE_WIDTH*0.7);
+          mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), new THREE.Vector3(dx,dy,dz).normalize());
+        }
+      }
+
+      applyColors(colors) {
+        if (!colors) return;
+        for (let i = 0; i < 21; i++) this.jointMats[i].color.copy(colors[i]);
+      }
+
+      dispose() {
+        scene.remove(this.group);
+        this.group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
       }
     }
 
@@ -586,6 +776,21 @@
         if (!handModels[id]) handModels[id] = new HandModel3D(id);
 
         const gesture = handModels[id].update(payload.landmarks);
+
+        // ── AI: compute alignment & color joints ─────────────────
+        const pct = computeAlignment(payload.landmarks, workerLandmarks);
+        updateAIPanel(pct);
+        if (pct !== null) {
+          const colors = jointColors(payload.landmarks, workerLandmarks);
+          if (colors) {
+            handModels[id].jointMeshes.forEach((m, i) => m.material.color.copy(colors[i]));
+            if (workerHandModel) workerHandModel.applyColors(colors);
+          }
+        } else {
+          // Reset expert hand to its base color when worker hand not visible
+          const baseColor = new THREE.Color(handModels[id].baseColor);
+          handModels[id].jointMeshes.forEach(m => m.material.color.copy(baseColor));
+        }
 
         if (gesture !== lastGesture && gesture !== "None") {
           lastGesture = gesture;
