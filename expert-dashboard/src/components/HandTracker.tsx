@@ -127,14 +127,21 @@ export default function HandTracker({
         });
 
         if (videoRef.current) {
+          let isProcessing = false;
           const camera = new cameraModule.Camera(videoRef.current, {
             onFrame: async () => {
-              if (videoRef.current && isMounted) {
-                await hands.send({ image: videoRef.current });
+              if (videoRef.current && isMounted && !isProcessing) {
+                isProcessing = true;
+                try {
+                  await hands.send({ image: videoRef.current });
+                } finally {
+                  isProcessing = false;
+                }
               }
             },
-            width: 480,   // reduced from 640 for speed
-            height: 360,  // reduced from 480 for speed
+            facingMode: 'environment', // Use back camera
+            width: 320,   // Low resolution for maximum ML performance
+            height: 240,
           });
           camera.start();
           cleanupRef.current = () => { camera.stop(); hands.close(); };
@@ -164,7 +171,7 @@ export default function HandTracker({
           ref={canvasRef}
           width={480}
           height={360}
-          style={{ width: "100%", borderRadius: "8px", transform: "scaleX(-1)" }}
+          style={{ width: "100%", borderRadius: "8px" }}
         />
       )}
       {status === "loading" && (
