@@ -1,29 +1,45 @@
 {
-  "type": "hand_data",
-  "source": "mediapipe | esp32",
-  "hand": "left | right",
-  "landmarks": [
-    { "id": 0, "name": "WRIST", "x": 0.0, "y": 0.0, "z": 0.0 },
-    { "id": 1, "name": "THUMB_CMC", "x": 0.0, "y": 0.0, "z": 0.0 },
-    { "id": 2, "name": "THUMB_MCP", "x": 0.0, "y": 0.0, "z": 0.0 },
-    { "id": 3, "name": "THUMB_IP", "x": 0.0, "y": 0.0, "z": 0.0 },
-    { "id": 4, "name": "THUMB_TIP", "x": 0.0, "y": 0.0, "z": 0.0 },
-    { "id": 5, "name": "INDEX_MCP", "x": 0.0, "y": 0.0, "z": 0.0 },
-    { "id": 6, "name": "INDEX_PIP", "x": 0.0, "y": 0.0, "z": 0.0 },
-    { "id": 7, "name": "INDEX_DIP", "x": 0.0, "y": 0.0, "z": 0.0 },
-    { "id": 8, "name": "INDEX_TIP", "x": 0.0, "y": 0.0, "z": 0.0 },
-    { "id": 9, "name": "MIDDLE_MCP", "x": 0.0, "y": 0.0, "z": 0.0 },
-    { "id": 10, "name": "MIDDLE_PIP", "x": 0.0, "y": 0.0, "z": 0.0 },
-    { "id": 11, "name": "MIDDLE_DIP", "x": 0.0, "y": 0.0, "z": 0.0 },
-    { "id": 12, "name": "MIDDLE_TIP", "x": 0.0, "y": 0.0, "z": 0.0 },
-    { "id": 13, "name": "RING_MCP", "x": 0.0, "y": 0.0, "z": 0.0 },
-    { "id": 14, "name": "RING_PIP", "x": 0.0, "y": 0.0, "z": 0.0 },
-    { "id": 15, "name": "RING_DIP", "x": 0.0, "y": 0.0, "z": 0.0 },
-    { "id": 16, "name": "RING_TIP", "x": 0.0, "y": 0.0, "z": 0.0 },
-    { "id": 17, "name": "PINKY_MCP", "x": 0.0, "y": 0.0, "z": 0.0 },
-    { "id": 18, "name": "PINKY_PIP", "x": 0.0, "y": 0.0, "z": 0.0 },
-    { "id": 19, "name": "PINKY_DIP", "x": 0.0, "y": 0.0, "z": 0.0 },
-    { "id": 20, "name": "PINKY_TIP", "x": 0.0, "y": 0.0, "z": 0.0 }
-  ],
-  "timestamp": 0
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Hand Landmark Payload",
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "hand_data"
+    },
+    "source": {
+      "type": "string",
+      "enum": ["mediapipe", "glove"]
+    },
+    "hand": {
+      "type": "string",
+      "enum": ["left", "right"]
+    },
+    "sessionId": {
+      "type": "string",
+      "description": "Session ID for routing hand data to the correct session room"
+    },
+    "timestamp": {
+      "type": "number",
+      "description": "Milliseconds since epoch"
+    },
+    "landmarks": {
+      "type": "array",
+      "description": "21 3D points representing the hand joints",
+      "items": {
+        "type": "object",
+        "properties": {
+          "x": { "type": "number" },
+          "y": { "type": "number" },
+          "z": { "type": "number" }
+        },
+        "required": ["x", "y", "z"],
+        "additionalProperties": false
+      },
+      "minItems": 21,
+      "maxItems": 21
+    }
+  },
+  "required": ["type", "source", "hand", "timestamp", "landmarks"],
+  "additionalProperties": false
 }
