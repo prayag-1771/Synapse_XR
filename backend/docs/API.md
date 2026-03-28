@@ -269,6 +269,100 @@ Error responses:
 - `403 Forbidden`
 - `404 Session not found`
 
+### GET /sessions/:id/voice
+
+Get voice transcript history logged during this session.
+
+Auth: same access policy as `GET /sessions/:id`.
+
+Success response `200`:
+
+```json
+{
+  "voiceHistory": [
+    {
+      "id": "1",
+      "sessionId": "uuid",
+      "eventType": "voice:transcript",
+      "userId": "expert-uuid",
+      "payload": { "text": "Move it left" },
+      "createdAt": "2026-03-27T00:05:00.000Z"
+    }
+  ]
+}
+```
+
+Error responses:
+
+- `401 Unauthorized`
+- `403 Forbidden`
+- `404 Session not found`
+
+### GET /sessions/:id/annotations
+
+Get remote annotation history logged during this session.
+
+Auth: same access policy as `GET /sessions/:id`.
+
+Success response `200`:
+
+```json
+{
+  "annotations": [
+    {
+      "id": "2",
+      "sessionId": "uuid",
+      "eventType": "annotation:update",
+      "userId": "expert-uuid",
+      "payload": { "lines": [] },
+      "createdAt": "2026-03-27T00:06:00.000Z"
+    }
+  ]
+}
+```
+
+Error responses:
+
+- `401 Unauthorized`
+- `403 Forbidden`
+- `404 Session not found`
+
+### GET /sessions/:id/analytics
+
+Get session event analytics, duration, and packet counts.
+
+Auth: same access policy as `GET /sessions/:id`.
+
+Success response `200`:
+
+```json
+{
+  "analytics": {
+    "sessionId": "uuid",
+    "totalEvents": 450,
+    "durationSeconds": 3600,
+    "eventCounts": {
+      "hand:data": 400,
+      "ai:detection": 25,
+      "voice:transcript": 15,
+      "annotation:update": 10
+    },
+    "handPacketsTotal": 400,
+    "aiDetectionFrames": 25,
+    "voiceTranscripts": 15,
+    "annotations": 10,
+    "firstEventAt": "2026-03-27T00:00:00.000Z",
+    "lastEventAt": "2026-03-27T01:00:00.000Z"
+  }
+}
+```
+
+Error responses:
+
+- `401 Unauthorized`
+- `403 Forbidden`
+- `404 Session not found`
+
 ### POST /sessions/:id/join
 
 Join a session as participant.
