@@ -18,13 +18,52 @@ const HAND_CONNECTIONS = [
 ];
 const FINGERTIPS = [4, 8, 12, 16, 20];
 
-function renderHandOverlay(
+// YOLO detection class colors (BGR->RGB mapped)
+const DETECTION_COLORS: Record<string, string> = {
+  plc: "#ffa500",
+  motor: "#0064ff",
+  wire: "#00ffff",
+  relay: "#ff4081",
+  push_button: "#76ff03",
+};
+
+interface DetectedObject {
+  label: string;
+  confidence: number;
+  bbox: [number, number, number, number]; // x1, y1, x2, y2 normalised 0-1
+}
+
+interface AiDetectionPayload {
+  sessionId?: string;
+  objects: DetectedObject[];
+  alerts: string[];
+}
+
+interface StepValidationPayload {
+  sessionId?: string;
+  currentStep: number;
+  passed: boolean;
+  message: string;
+  detectedCounts?: Record<string, number>;
+}
+
+const STEP_LABELS = [
+  { step: 0, name: "PLC Detection", icon: "🔲" },
+  { step: 1, name: "Motor Check", icon: "⚙️" },
+  { step: 2, name: "Wiring Verification", icon: "🔌" },
+  { step: 3, name: "System Nominal", icon: "✅" },
+];
+
+function renderAROverlay(
   ctx: CanvasRenderingContext2D,
   hands: Map<string, LandmarkPoint[]>,
+  detections: DetectedObject[],
   w: number,
   h: number
 ) {
   ctx.clearRect(0, 0, w, h);
+
+  // Draw hand landmarks
   for (const [hand, landmarks] of hands.entries()) {
     if (!landmarks || landmarks.length < 21) continue;
     const color = hand === "left" ? "rgba(0,229,255,0.85)" : "rgba(0,255,136,0.85)";
@@ -49,6 +88,38 @@ function renderHandOverlay(
       ctx.fillStyle = isTip ? "rgba(255,255,255,0.95)" : color;
       ctx.fill();
     }
+    ctx.restore();
+  }
+
+  // Draw YOLO detection bounding boxes
+  for (const det of detections) {
+    const boxColor = DETECTION_COLORS[det.label] ?? "#ffffff";
+    const x1 = det.bbox[0] * w;
+    const y1 = det.bbox[1] * h;
+    const x2 = det.bbox[2] * w;
+    const y2 = det.bbox[3] * h;
+    const bw = x2 - x1;
+    const bh = y2 - y1;
+
+    ctx.save();
+    ctx.strokeStyle = boxColor;
+    ctx.lineWidth = 2.5;
+    ctx.shadowColor = boxColor;
+    ctx.shadowBlur = 8;
+    ctx.strokeRect(x1, y1, bw, bh);
+
+    // Label background
+    const labelText = `${det.label} ${(det.confidence * 100).toFixed(0)}%`;
+    ctx.font = "bold 13px monospace";
+    const textMetrics = ctx.measureText(labelText);
+    const labelPadX = 6;
+    const labelPadY = 4;
+    const labelH = 18;
+    ctx.fillStyle = boxColor;
+    ctx.shadowBlur = 0;
+    ctx.fillRect(x1, y1 - labelH - labelPadY, textMetrics.width + labelPadX * 2, labelH + labelPadY);
+    ctx.fillStyle = "#000";
+    ctx.fillText(labelText, x1 + labelPadX, y1 - labelPadY - 2);
     ctx.restore();
   }
 }
@@ -93,6 +164,7 @@ interface WebRtcSignalPayload {
 
 const MAX_EVENT_LOG_ITEMS = 24;
 const MAX_PPS_HISTORY = 20;
+const MAX_DETECTIONS_LOG = 12;
 const WEBRTC_ICE_SERVERS: RTCIceServer[] = [{ urls: ["stun:stun.l.google.com:19302"] }];
 
 const getMediaErrorMessage = (error: unknown): string => {
@@ -169,6 +241,16 @@ export default function SessionRouteClient({ sessionId }: SessionRouteClientProp
   const [handTrackingStatus, setHandTrackingStatus] = useState<"loading" | "active" | "error" | "stopped">("stopped");
   const [handEmitCount, setHandEmitCount] = useState(0);
 
+  // AI detection state
+  const [detections, setDetections] = useState<DetectedObject[]>([]);
+  const [detectionAlerts, setDetectionAlerts] = useState<string[]>([]);
+  const [detectionCount, setDetectionCount] = useState(0);
+  const [stepState, setStepState] = useState<StepValidationPayload>({
+    currentStep: 0,
+    passed: false,
+    message: "Waiting for detection feed…",
+  });
+
   const socketRef = useRef<Socket | null>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -181,6 +263,7 @@ export default function SessionRouteClient({ sessionId }: SessionRouteClientProp
   const arCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const handLandmarksRef = useRef<Map<string, LandmarkPoint[]>>(new Map());
   const handTimestampsRef = useRef<Map<string, number>>(new Map());
+  const detectionsRef = useRef<DetectedObject[]>([]);
   const [hasARVideo, setHasARVideo] = useState(false);
 
   const isExpert = user?.role === "expert";
@@ -568,6 +651,22 @@ export default function SessionRouteClient({ sessionId }: SessionRouteClientProp
       pushEventLog("annotation:update");
     });
 
+    socket.on("ai:detection", (payload: AiDetectionPayload) => {
+      pushEventLog("ai:detection");
+      const objs = Array.isArray(payload.objects) ? payload.objects : [];
+      setDetections(objs);
+      detectionsRef.current = objs;
+      setDetectionCount((c) => c + 1);
+      if (Array.isArray(payload.alerts) && payload.alerts.length > 0) {
+        setDetectionAlerts(payload.alerts);
+      }
+    });
+
+    socket.on("ai:step-validation", (payload: StepValidationPayload) => {
+      pushEventLog("ai:step-validation");
+      setStepState(payload);
+    });
+
     socket.on("session:participant-joined", () => {
       pushEventLog("session:participant-joined");
       void refreshSession(token).catch(() => {
@@ -747,7 +846,7 @@ export default function SessionRouteClient({ sessionId }: SessionRouteClientProp
     handTimestampsRef.current.set(hand, Date.now());
   }, []);
 
-  // RAF render loop for AR canvas overlay
+  // RAF render loop for AR canvas overlay (hands + YOLO bounding boxes)
   useEffect(() => {
     let animId: number;
     const HAND_TIMEOUT = 2000;
@@ -769,7 +868,7 @@ export default function SessionRouteClient({ sessionId }: SessionRouteClientProp
         }
         const ctx = canvas.getContext("2d");
         if (ctx) {
-          renderHandOverlay(ctx, handLandmarksRef.current, canvas.width, canvas.height);
+          renderAROverlay(ctx, handLandmarksRef.current, detectionsRef.current, canvas.width, canvas.height);
         }
       }
       animId = requestAnimationFrame(render);
@@ -1034,6 +1133,8 @@ export default function SessionRouteClient({ sessionId }: SessionRouteClientProp
             <span className="text-xs text-white/80 font-mono">{connectionState}</span>
             {webrtcStatus === "connected" && <span className="text-xs text-cyan-300/80 font-mono">• WebRTC</span>}
             {handPacketsPerSecond > 0 && <span className="text-xs text-green-300/80 font-mono">• {handPacketsPerSecond} pps</span>}
+            {detections.length > 0 && <span className="text-xs text-orange-300/80 font-mono">• {detections.length} obj</span>}
+            {stepState.currentStep > 0 && <span className={`text-xs font-mono ${stepState.currentStep >= 3 ? "text-emerald-300/80" : "text-amber-300/80"}`}>• Step {stepState.currentStep}/3</span>}
           </div>
 
           {isHandTrackingActive && isExpert && (
@@ -1092,6 +1193,125 @@ export default function SessionRouteClient({ sessionId }: SessionRouteClientProp
           </span>
         </div>
         {webrtcError && <p className="px-4 py-2 text-xs text-red-400 bg-zinc-950">{webrtcError}</p>}
+      </section>
+
+      {/* ═══ AI DETECTION & STEP VALIDATION ═══ */}
+      <section className="grid gap-4 md:grid-cols-2">
+
+        {/* Detection Feed */}
+        <article className="rounded-2xl border border-black/10 bg-white p-5">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-medium">YOLO Detection Feed</h2>
+            <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-mono text-black/60">
+              {detectionCount} frames
+            </span>
+          </div>
+
+          {detections.length > 0 ? (
+            <ul className="mt-3 grid gap-2">
+              {detections.map((det, idx) => {
+                const barColor = DETECTION_COLORS[det.label] ?? "#888";
+                return (
+                  <li key={`det-${idx}-${det.label}`} className="flex items-center gap-3 rounded-xl border border-black/10 px-3 py-2">
+                    <div
+                      className="h-3 w-3 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: barColor, boxShadow: `0 0 6px ${barColor}` }}
+                    />
+                    <span className="flex-1 text-sm font-medium text-black">{det.label}</span>
+                    <div className="w-24 h-2 rounded-full bg-zinc-100 overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-300"
+                        style={{ width: `${(det.confidence * 100).toFixed(0)}%`, backgroundColor: barColor }}
+                      />
+                    </div>
+                    <span className="text-xs font-mono text-black/50 w-10 text-right">
+                      {(det.confidence * 100).toFixed(0)}%
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="mt-3 text-sm text-black/50">No detections received yet. Waiting for worker&apos;s YOLO feed…</p>
+          )}
+
+          {detectionAlerts.length > 0 && (
+            <div className="mt-3 rounded-xl border border-amber-300/40 bg-amber-50 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-amber-700">⚠ Alerts</p>
+              <ul className="mt-1 grid gap-1">
+                {detectionAlerts.map((alert, idx) => (
+                  <li key={`alert-${idx}`} className="text-sm text-amber-800">{alert}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </article>
+
+        {/* Step Validation Panel */}
+        <article className="rounded-2xl border border-black/10 bg-white p-5">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-medium">Repair Step Validation</h2>
+            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+              stepState.currentStep >= 3
+                ? "bg-emerald-100 text-emerald-700"
+                : stepState.passed
+                  ? "bg-blue-100 text-blue-700"
+                  : "bg-amber-100 text-amber-700"
+            }`}>
+              {stepState.currentStep >= 3 ? "COMPLETE" : stepState.passed ? "STEP PASSED" : "IN PROGRESS"}
+            </span>
+          </div>
+
+          {/* Step progress */}
+          <div className="mt-4 flex items-center gap-1">
+            {STEP_LABELS.map((s) => {
+              const isActive = stepState.currentStep === s.step;
+              const isDone = stepState.currentStep > s.step;
+              return (
+                <div key={s.step} className="flex-1 flex flex-col items-center gap-1">
+                  <div className={`w-full h-2 rounded-full transition-all duration-500 ${
+                    isDone
+                      ? "bg-emerald-400"
+                      : isActive
+                        ? stepState.passed ? "bg-emerald-400" : "bg-amber-400 animate-pulse"
+                        : "bg-zinc-200"
+                  }`} />
+                  <span className="text-xs">{s.icon}</span>
+                  <span className={`text-[10px] font-medium ${
+                    isActive ? "text-black" : isDone ? "text-emerald-600" : "text-black/40"
+                  }`}>{s.name}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Current message */}
+          <div className={`mt-4 rounded-xl p-3 text-sm font-medium ${
+            stepState.currentStep >= 3
+              ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+              : stepState.passed
+                ? "bg-blue-50 text-blue-800 border border-blue-200"
+                : "bg-zinc-50 text-zinc-700 border border-zinc-200"
+          }`}>
+            {stepState.message}
+          </div>
+
+          {/* Component counts from latest step validation */}
+          {stepState.detectedCounts && (
+            <div className="mt-3 grid grid-cols-5 gap-1">
+              {Object.entries(stepState.detectedCounts).map(([component, count]) => (
+                <div key={component} className="flex flex-col items-center rounded-lg bg-zinc-50 px-1 py-2">
+                  <div
+                    className="w-2.5 h-2.5 rounded-full mb-1"
+                    style={{ backgroundColor: DETECTION_COLORS[component] ?? "#888" }}
+                  />
+                  <span className="text-xs font-medium text-black">{count}</span>
+                  <span className="text-[9px] text-black/50 text-center leading-tight">{component.replace("_", " ")}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </article>
       </section>
 
       <section className="grid gap-4 md:grid-cols-2">
