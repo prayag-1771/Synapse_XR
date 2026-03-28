@@ -66,26 +66,65 @@ function renderAROverlay(
   // Draw hand landmarks
   for (const [hand, landmarks] of hands.entries()) {
     if (!landmarks || landmarks.length < 21) continue;
-    const color = hand === "left" ? "rgba(0,229,255,0.85)" : "rgba(0,255,136,0.85)";
-    const glow = hand === "left" ? "#00e5ff" : "#00ff88";
+    const color = hand === "left" ? "#00e5ff" : "#00ff88";
+    const bgFill = hand === "left" ? "rgba(0,229,255,0.15)" : "rgba(0,255,136,0.15)";
+    
     ctx.save();
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 4;
+    
+    // Draw translucent holographic palm base
+    const palmIndices = [0, 1, 5, 9, 13, 17];
+    ctx.beginPath();
+    ctx.moveTo(landmarks[palmIndices[0]].x * w, landmarks[palmIndices[0]].y * h);
+    for (let i = 1; i < palmIndices.length; i++) {
+      ctx.lineTo(landmarks[palmIndices[i]].x * w, landmarks[palmIndices[i]].y * h);
+    }
+    ctx.closePath();
+    ctx.fillStyle = bgFill;
+    ctx.fill();
+
+    // Setup lines
     ctx.lineCap = "round";
-    ctx.shadowColor = glow;
-    ctx.shadowBlur = 14;
+    ctx.lineJoin = "round";
+
+    // Draw thick colored outer glow lines
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 5;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 15;
+    ctx.beginPath();
     for (const [i, j] of HAND_CONNECTIONS) {
-      ctx.beginPath();
       ctx.moveTo(landmarks[i].x * w, landmarks[i].y * h);
       ctx.lineTo(landmarks[j].x * w, landmarks[j].y * h);
-      ctx.stroke();
     }
+    ctx.stroke();
+
+    // Draw thin bright white inner core line (neon effect)
+    ctx.strokeStyle = "rgba(255,255,255,0.9)";
+    ctx.lineWidth = 2;
+    ctx.shadowBlur = 4;
+    ctx.stroke();
+
+    // Draw nodes
     ctx.shadowBlur = 8;
     for (let i = 0; i < landmarks.length; i++) {
       const isTip = FINGERTIPS.includes(i);
+      const isKnuckle = [0, 5, 9, 13, 17].includes(i);
+      const x = landmarks[i].x * w;
+      const y = landmarks[i].y * h;
+
+      if (isTip) {
+        // Highlighting fingertip outer rings
+        ctx.beginPath();
+        ctx.arc(x, y, 10, 0, Math.PI * 2);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+
       ctx.beginPath();
-      ctx.arc(landmarks[i].x * w, landmarks[i].y * h, isTip ? 7 : 4, 0, Math.PI * 2);
-      ctx.fillStyle = isTip ? "rgba(255,255,255,0.95)" : color;
+      const radius = isTip ? 5 : (isKnuckle ? 4 : 2.5);
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = isTip ? "#ffffff" : color;
       ctx.fill();
     }
     ctx.restore();
