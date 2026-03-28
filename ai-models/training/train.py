@@ -41,3 +41,6 @@ results = model.train(
 print("\n✅ Training complete!")
 print(f"   Best weights : {PROJECT}/{NAME}/weights/best.pt")
 print(f"   Results plot : {PROJECT}/{NAME}/results.png")
+
+model.export(format="onnx")
+print("✅ Model exported to ONNX format!")
