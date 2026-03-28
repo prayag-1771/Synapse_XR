@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Synapse XR - Worker Demo</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a0f;
+      color: #e0e0e0;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      overflow: hidden;
+      height: 100vh;
+    }
+    #canvas-container {
+      width: 100vw; height: 100vh;
+      position: relative;
+    }
+    /* Webcam background — simulates worker's AR glass view */
+    #camera-feed {
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+      z-index: 0;
+    }
+    #canvas-container canvas {
+      position: absolute; top: 0; left: 0;
+      z-index: 1;
+    }
+    #hud {
+      position: absolute; top: 0; left: 0; right: 0;
+      padding: 16px 24px;
+      display: flex; justify-content: space-between; align-items: flex-start;
+      pointer-events: none; z-index: 10;
+    }
+    .hud-panel {
+      background: rgba(10,10,20,0.75);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px; padding: 14px 20px;
+    }
+    .hud-left { max-width: 320px; }
+    .hud-right { text-align: right; max-width: 280px; }
+    .status-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 13px; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #555; transition: background 0.3s; }
+    .status-dot.connected { background: #00e676; box-shadow: 0 0 6px #00e676; }
+    .status-dot.disconnected { background: #ff1744; }
+    .label { color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+    #gesture-display {
+      font-size: 28px; font-weight: 700; color: #00e5ff;
+      text-shadow: 0 0 20px rgba(0,229,255,0.4);
+      transition: all 0.2s; min-height: 36px;
+    }
+    #gesture-display.active { color: #76ff03; text-shadow: 0 0 24px rgba(118,255,3,0.5); }
+    #fps-display, #latency-display, #packet-count { font-size: 12px; color: #666; font-family: monospace; }
+    #session-display { font-size: 11px; color: #888; font-family: monospace; word-break: break-all; }
+    #gesture-toast {
+      position: absolute; bottom: 80px; left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: rgba(0,229,255,0.15); border: 1px solid rgba(0,229,255,0.3);
+      border-radius: 16px; padding: 12px 32px;
+      font-size: 20px; font-weight: 600; color: #00e5ff;
+      opacity: 0; transition: opacity 0.3s, transform 0.3s;
+      pointer-events: none; z-index: 20;
+    }
+    #gesture-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    /* Voice transcript subtitle overlay */
+    #voice-subtitle {
+      position: absolute; bottom: 140px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.7); border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 12px; padding: 10px 24px;
+      font-size: 16px; font-weight: 500; color: #fff;
+      text-align: center; max-width: 70%;
+      opacity: 0; transition: opacity 0.4s;
+      pointer-events: none; z-index: 20;
+    }
+    #voice-subtitle.show { opacity: 1; }
+    #bottom-bar {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      padding: 12px 24px; display: flex; justify-content: center;
+      pointer-events: none; z-index: 10;
+    }
+    .bottom-label { font-size: 11px; color: #555; text-transform: uppercase; letter-spacing: 1px; }
+    #error-banner {
+      display: none; position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%,-50%); text-align: center;
+      color: #ff5252; font-size: 16px; z-index: 30;
+    }
+    /* Session join overlay */
+    #session-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(10,10,15,0.92);
+      backdrop-filter: blur(20px);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 100;
+    }
+    #session-overlay.hidden { display: none; }
+    .join-card {
+      background: rgba(20,20,30,0.95);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 20px; padding: 36px 40px;
+      max-width: 420px; width: 90%;
+      text-align: center;
+    }
+    .join-card h1 {
+      font-size: 24px; font-weight: 700;
+      background: linear-gradient(135deg, #00e5ff, #76ff03);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 8px;
+    }
+    .join-card p { font-size: 13px; color: #888; margin-bottom: 24px; }
+    .join-card input {
+      width: 100%; padding: 12px 16px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 10px; color: #e0e0e0;
+      font-size: 14px; font-family: monospace;
+      outline: none; transition: border-color 0.2s;
+      margin-bottom: 16px;
+    }
+    .join-card input:focus { border-color: #00e5ff; }
+    .join-card input::placeholder { color: #555; }
+    .join-card button {
+      width: 100%; padding: 12px;
+      background: linear-gradient(135deg, #00e5ff, #00b0ff);
+      border: none; border-radius: 10px;
+      color: #000; font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: opacity 0.2s;
+    }
+    .join-card button:hover { opacity: 0.85; }
+    .join-card button:disabled { opacity: 0.4; cursor: not-allowed; }
+    .join-error { color: #ff5252; font-size: 12px; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <!-- Session Join Overlay -->
+  <div id="session-overlay">
+    <div class="join-card">
+      <h1>Synapse XR</h1>
+      <p>Worker Demo — Enter a session ID to receive expert hand guidance</p>
+      <input id="session-input" type="text" placeholder="Paste session ID from expert dashboard" autofocus />
+      <button id="join-btn" onclick="joinSession()">Connect to Session</button>
+      <div id="join-error" class="join-error" style="display:none"></div>
+    </div>
+  </div>
+
+  <div id="canvas-container">
+    <video id="camera-feed" autoplay playsinline muted></video>
+  </div>
+
+  <div id="hud">
+    <div class="hud-panel hud-left">
+      <div class="status-row">
+        <div class="status-dot" id="conn-dot"></div>
+        <span id="conn-text">Waiting for session...</span>
+      </div>
+      <div id="session-display"></div>
+      <div class="status-row" style="margin-top:6px"><span class="label">Gesture:</span></div>
+      <div id="gesture-display">--</div>
+    </div>
+    <div class="hud-panel hud-right">
+      <div id="fps-display">FPS: --</div>
+      <div id="latency-display">Latency: -- ms</div>
+      <div id="packet-count">Packets: 0</div>
+    </div>
+  </div>
+  <div id="gesture-toast"></div>
+  <div id="voice-subtitle"></div>
+  <div id="bottom-bar">
+    <span class="bottom-label">Synapse XR Worker Demo</span>
+  </div>
+  <div id="error-banner"></div>
+
+  <!-- Dependencies: Socket.IO + Three.js (global UMD builds, no modules needed) -->
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+
+  <script>
+  // ════════════════════════════════════════════════════════════════
+  //  SYNAPSE XR — BROWSER WORKER DEMO
+  //  Tests the full hand-tracking pipeline without Unity
+  // ════════════════════════════════════════════════════════════════
+
+  (function () {
+    "use strict";
+
+    // ─── DEPENDENCY CHECK ─────────────────────────────────────────
+    const errorBanner = document.getElementById("error-banner");
+    if (typeof io === "undefined") {
+      errorBanner.style.display = "block";
+      errorBanner.textContent = "Socket.IO failed to load — check your internet connection.";
+      return;
+    }
+    if (typeof THREE === "undefined") {
+      errorBanner.style.display = "block";
+      errorBanner.textContent = "Three.js failed to load — check your internet connection.";
+      return;
+    }
+
+    // ─── CONFIG ───────────────────────────────────────────────────
+    const SERVER_URL = window.location.origin;  // Same origin as backend
+    const JOINT_RADIUS = 8;    // pixels
+    const BONE_WIDTH = 5;      // pixels
+
+    const BONE_CONNECTIONS = [
+      [0,1],[1,2],[2,3],[3,4],
+      [0,5],[5,6],[6,7],[7,8],
+      [0,9],[9,10],[10,11],[11,12],
+      [0,13],[13,14],[14,15],[15,16],
+      [0,17],[17,18],[18,19],[19,20],
+      [5,9],[9,13],[13,17]
+    ];
+    const PALM_INDICES = [0, 5, 9, 13, 17];
+    const FINGERTIP_INDICES = [4, 8, 12, 16, 20];
+
+    // ─── GESTURE DETECTOR (ported from GestureDetector.cs) ───────
+    class GestureDetector {
+      constructor() {
+        this.debounceTime = 0.3;
+        this.thumbThresholdRatio = 1.15;
+        this.currentGesture = "None";
+        this.candidateGesture = "None";
+        this.candidateTimer = 0;
+        this.lastFrameTime = performance.now();
+      }
+
+      detect(positions) {
+        if (!positions || positions.length < 21) return this.currentGesture;
+        const now = performance.now();
+        const dt = (now - this.lastFrameTime) / 1000;
+        this.lastFrameTime = now;
+
+        const thumbExt = this._isThumbExtended(positions);
+        const indexExt = this._isFingerExtended(positions, 8, 6, 5);
+        const middleExt = this._isFingerExtended(positions, 12, 10, 9);
+        const ringExt = this._isFingerExtended(positions, 16, 14, 13);
+        const pinkyExt = this._isFingerExtended(positions, 20, 18, 17);
+
+        const detected = this._classify(thumbExt, indexExt, middleExt, ringExt, pinkyExt);
+
+        if (detected === this.candidateGesture) {
+          this.candidateTimer += dt;
+          if (this.candidateTimer >= this.debounceTime && this.currentGesture !== detected) {
+            this.currentGesture = detected;
+          }
+        } else {
+          this.candidateGesture = detected;
+          this.candidateTimer = 0;
+        }
+        return this.currentGesture;
+      }
+
+      _classify(thumb, index, middle, ring, pinky) {
+        const count = [thumb, index, middle, ring, pinky].filter(Boolean).length;
+        if (thumb && index && middle && ring && pinky) return "Open Palm";
+        if (count === 0) return "Fist";
+        if (thumb && !index && !middle && !ring && !pinky) return "Thumbs Up";
+        if (!thumb && index && !middle && !ring && !pinky) return "Pointing";
+        if (!thumb && index && middle && !ring && !pinky) return "Peace";
+        return "None";
+      }
+
+      _isFingerExtended(pos, tipIdx, pipIdx, mcpIdx) {
+        return this._dist(pos[tipIdx], pos[mcpIdx]) > this._dist(pos[pipIdx], pos[mcpIdx]);
+      }
+
+      _isThumbExtended(pos) {
+        return this._dist(pos[4], pos[17]) > this._dist(pos[3], pos[17]) * this.thumbThresholdRatio;
+      }
+
+      _dist(a, b) {
+        const dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
+        return Math.sqrt(dx*dx + dy*dy + dz*dz);
+      }
+    }
+
+    // ─── KALMAN SMOOTHER (ported from Smoothing.cs) ──────────────
+    class KalmanSmoother {
+      constructor() {
+        this.qXY = 0.001; this.qZ = 0.002;
+        this.rXY = 0.01;  this.rZ = 0.03;
+        this.pX = 1; this.pY = 1; this.pZ = 1;
+        this.estimate = null;
+        this.velocity = {x:0,y:0,z:0};
+        this.lastM = null;
+        this.hasVel = false;
+      }
+
+      smooth(m) {
+        if (!this.estimate) {
+          this.estimate = {...m}; this.lastM = {...m};
+          return {...m};
+        }
+        const vel = { x: m.x-this.lastM.x, y: m.y-this.lastM.y, z: m.z-this.lastM.z };
+        if (this.hasVel) {
+          this.velocity.x = 0.5*vel.x + 0.5*this.velocity.x;
+          this.velocity.y = 0.5*vel.y + 0.5*this.velocity.y;
+          this.velocity.z = 0.5*vel.z + 0.5*this.velocity.z;
+        } else { this.velocity = {...vel}; this.hasVel = true; }
+        this.lastM = {...m};
+
+        const pred = {
+          x: this.estimate.x+this.velocity.x,
+          y: this.estimate.y+this.velocity.y,
+          z: this.estimate.z+this.velocity.z
+        };
+
+        this.pX += this.qXY; const kX = this.pX/(this.pX+this.rXY); this.pX *= (1-kX);
+        this.pY += this.qXY; const kY = this.pY/(this.pY+this.rXY); this.pY *= (1-kY);
+        this.pZ += this.qZ;  const kZ = this.pZ/(this.pZ+this.rZ);  this.pZ *= (1-kZ);
+
+        this.estimate = {
+          x: pred.x + kX*(m.x-pred.x),
+          y: pred.y + kY*(m.y-pred.y),
+          z: pred.z + kZ*(m.z-pred.z)
+        };
+        return {...this.estimate};
+      }
+    }
+
+    // ─── WEBCAM (worker's camera view) ─────────────────────────
+    const video = document.getElementById("camera-feed");
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: 1280, height: 720 } })
+      .then(stream => { video.srcObject = stream; })
+      .catch(() => {
+        // Fallback to any camera
+        navigator.mediaDevices.getUserMedia({ video: true })
+          .then(stream => { video.srcObject = stream; })
+          .catch(err => console.warn("[demo] No camera:", err.message));
+      });
+
+    // ─── THREE.JS SCENE (transparent overlay on camera) ─────────
+    const container = document.getElementById("canvas-container");
+    const scene = new THREE.Scene();
+    // No background — transparent, camera feed shows through
+
+    // Orthographic camera: maps normalized MediaPipe coords directly to screen
+    const W = window.innerWidth, H = window.innerHeight;
+    const camera = new THREE.OrthographicCamera(0, W, 0, -H, -500, 500);
+    camera.position.set(0, 0, 1);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(W, H);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setClearColor(0x000000, 0); // fully transparent
+    container.appendChild(renderer.domElement);
+
+    // Lighting — bright so hand is clearly visible over camera
+    scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    keyLight.position.set(0, 0, 500);
+    scene.add(keyLight);
+
+    // ─── 3D HAND MODEL ──────────────────────────────────────────
+    class HandModel3D {
+      constructor(handId) {
+        this.handId = handId;
+        this.group = new THREE.Group();
+        scene.add(this.group);
+
+        this.smoothers = Array.from({length:21}, () => new KalmanSmoother());
+        this.positions = new Array(21).fill(null);
+        this.gestureDetector = new GestureDetector();
+        this.lastUpdate = performance.now();
+
+        // AR-style glowing materials
+        const color = handId === "left" ? 0x00e5ff : 0x00ff88;
+        const jointMat = new THREE.MeshBasicMaterial({color, transparent:true, opacity:0.85});
+        const tipMat = new THREE.MeshBasicMaterial({color:0xffffff, transparent:true, opacity:0.95});
+        this.boneMat = new THREE.MeshBasicMaterial({color, transparent:true, opacity:0.7});
+        this.palmMat = new THREE.MeshBasicMaterial({color, transparent:true, opacity:0.2, side:THREE.DoubleSide});
+
+        // Joint spheres
+        this.jointMeshes = [];
+        const sphereGeo = new THREE.SphereGeometry(1, 16, 12);
+        for (let i = 0; i < 21; i++) {
+          const isTip = FINGERTIP_INDICES.includes(i);
+          const mesh = new THREE.Mesh(sphereGeo, isTip ? tipMat : jointMat);
+          mesh.scale.setScalar(isTip ? JOINT_RADIUS*1.3 : JOINT_RADIUS);
+          mesh.castShadow = true;
+          this.group.add(mesh);
+          this.jointMeshes.push(mesh);
+        }
+
+        // Bones
+        this.boneMeshes = [];
+        const cylGeo = new THREE.CylinderGeometry(1, 1, 1, 8);
+        cylGeo.translate(0, 0.5, 0);
+        for (let i = 0; i < BONE_CONNECTIONS.length; i++) {
+          const mesh = new THREE.Mesh(cylGeo, this.boneMat);
+          mesh.castShadow = true;
+          this.group.add(mesh);
+          this.boneMeshes.push(mesh);
+        }
+
+        // Palm
+        const palmGeo = new THREE.BufferGeometry();
+        palmGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(5*3), 3));
+        palmGeo.setIndex([0,1,2, 0,2,3, 0,3,4, 0,2,1, 0,3,2, 0,4,3]);
+        this.palmMesh = new THREE.Mesh(palmGeo, this.palmMat);
+        this.group.add(this.palmMesh);
+      }
+
+      update(landmarks) {
+        this.lastUpdate = performance.now();
+        const sw = window.innerWidth, sh = window.innerHeight;
+        for (let i = 0; i < 21; i++) {
+          // MediaPipe landmarks are normalized 0-1; map to screen pixels
+          // Mirror X to match the mirrored camera feed (scaleX(-1))
+          const raw = {
+            x: landmarks[i].x * sw,          // mirrored camera = direct X mapping
+            y: -landmarks[i].y * sh,          // Y is inverted (screen Y goes down, ortho Y goes up)
+            z: landmarks[i].z * sw * 0.5      // Z for depth (relative to hand size)
+          };
+          const s = this.smoothers[i].smooth(raw);
+          this.positions[i] = s;
+          this.jointMeshes[i].position.set(s.x, s.y, s.z);
+        }
+
+        for (let i = 0; i < BONE_CONNECTIONS.length; i++) {
+          const [a, b] = BONE_CONNECTIONS[i];
+          this._updateBone(this.boneMeshes[i], this.positions[a], this.positions[b]);
+        }
+
+        const posAttr = this.palmMesh.geometry.getAttribute("position");
+        for (let i = 0; i < PALM_INDICES.length; i++) {
+          const p = this.positions[PALM_INDICES[i]];
+          posAttr.setXYZ(i, p.x, p.y, p.z);
+        }
+        posAttr.needsUpdate = true;
+        this.palmMesh.geometry.computeVertexNormals();
+
+        return this.gestureDetector.detect(this.positions);
+      }
+
+      _updateBone(mesh, from, to) {
+        const dx = to.x-from.x, dy = to.y-from.y, dz = to.z-from.z;
+        const len = Math.sqrt(dx*dx + dy*dy + dz*dz);
+        if (len < 0.001) return;
+        mesh.position.set(from.x, from.y, from.z);
+        mesh.scale.set(BONE_WIDTH, len, BONE_WIDTH);
+        const dir = new THREE.Vector3(dx, dy, dz).normalize();
+        mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir);
+      }
+
+      dispose() {
+        scene.remove(this.group);
+        this.group.traverse(obj => {
+          if (obj.geometry) obj.geometry.dispose();
+          if (obj.material) obj.material.dispose();
+        });
+      }
+    }
+
+    // ─── STATE ────────────────────────────────────────────────────
+    const handModels = {};
+    const HAND_TIMEOUT = 2000;
+    let packetCount = 0, lastGesture = "None", toastTimer = null;
+    let socket = null;
+    let activeSessionId = null;
+    let subtitleTimer = null;
+
+    const connDot = document.getElementById("conn-dot");
+    const connText = document.getElementById("conn-text");
+    const gestureDisplay = document.getElementById("gesture-display");
+    const fpsDisplay = document.getElementById("fps-display");
+    const latencyDisplay = document.getElementById("latency-display");
+    const packetDisplay = document.getElementById("packet-count");
+    const gestureToast = document.getElementById("gesture-toast");
+    const sessionDisplay = document.getElementById("session-display");
+    const sessionOverlay = document.getElementById("session-overlay");
+    const voiceSubtitle = document.getElementById("voice-subtitle");
+
+    // ─── SESSION JOIN ────────────────────────────────────────────
+    window.joinSession = function () {
+      const input = document.getElementById("session-input");
+      const joinBtn = document.getElementById("join-btn");
+      const joinError = document.getElementById("join-error");
+      const sessionId = input.value.trim();
+
+      if (!sessionId) {
+        joinError.textContent = "Please enter a session ID";
+        joinError.style.display = "block";
+        return;
+      }
+
+      joinBtn.disabled = true;
+      joinBtn.textContent = "Connecting...";
+      joinError.style.display = "none";
+      activeSessionId = sessionId;
+
+      connectToSession(sessionId);
+    };
+
+    function connectToSession(sessionId) {
+      const joinBtn = document.getElementById("join-btn");
+      const joinError = document.getElementById("join-error");
+
+      console.log("[demo] Connecting to", SERVER_URL, "for session", sessionId);
+
+      socket = io(SERVER_URL, {
+        auth: { mode: "demo" },
+        reconnection: true,
+        reconnectionDelay: 2000,
+        reconnectionDelayMax: 30000
+      });
+
+      socket.on("connect", () => {
+        console.log("[demo] Connected:", socket.id);
+        connDot.className = "status-dot connected";
+        connText.textContent = "Connected (" + socket.id + ")";
+        sessionDisplay.textContent = "Session: " + sessionId;
+
+        // Join the session room
+        socket.emit("session:join", { sessionId });
+      });
+
+      socket.on("connect_error", (err) => {
+        console.error("[demo] Connection error:", err.message);
+        connDot.className = "status-dot disconnected";
+        connText.textContent = "Error: " + err.message;
+
+        if (sessionOverlay && !sessionOverlay.classList.contains("hidden")) {
+          joinError.textContent = "Connection failed: " + err.message;
+          joinError.style.display = "block";
+          joinBtn.disabled = false;
+          joinBtn.textContent = "Connect to Session";
+        }
+      });
+
+      socket.on("disconnect", (reason) => {
+        console.log("[demo] Disconnected:", reason);
+        connDot.className = "status-dot disconnected";
+        connText.textContent = "Disconnected — " + reason;
+      });
+
+      // Session joined confirmation — hide the overlay
+      socket.on("error:event", (payload) => {
+        if (payload.event === "session:join") {
+          console.error("[demo] Session join failed:", payload.message);
+          joinError.textContent = payload.message;
+          joinError.style.display = "block";
+          joinBtn.disabled = false;
+          joinBtn.textContent = "Connect to Session";
+        }
+      });
+
+      // When we join successfully, the server sends us into the room
+      // We detect this by NOT getting an error after emitting session:join
+      // Give it a moment for error response, then show the main view
+      socket.on("connect", function onFirstConnect() {
+        socket.off("connect", onFirstConnect);
+        setTimeout(() => {
+          if (socket.connected && sessionOverlay) {
+            sessionOverlay.classList.add("hidden");
+          }
+        }, 1000);
+      });
+
+      socket.on("session:participant-joined", (payload) => {
+        console.log("[demo] Participant joined:", payload.userId);
+      });
+
+      socket.on("session:participant-left", (payload) => {
+        console.log("[demo] Participant left:", payload.userId);
+      });
+
+      socket.on("session:end", () => {
+        console.log("[demo] Session ended by remote");
+        connText.textContent = "Session ended";
+      });
+
+      // ─── HAND DATA ──────────────────────────────────────────────
+      socket.on("hand:data", (payload) => {
+        packetCount++;
+        const latency = Date.now() - payload.timestamp;
+        latencyDisplay.textContent = "Latency: " + latency + " ms";
+
+        if (!payload.landmarks || payload.landmarks.length < 21) return;
+
+        const id = (payload.hand || "right").toLowerCase();
+        if (!handModels[id]) handModels[id] = new HandModel3D(id);
+
+        const gesture = handModels[id].update(payload.landmarks);
+
+        if (gesture !== lastGesture && gesture !== "None") {
+          lastGesture = gesture;
+          gestureToast.textContent = gesture;
+          gestureToast.classList.add("show");
+          clearTimeout(toastTimer);
+          toastTimer = setTimeout(() => gestureToast.classList.remove("show"), 1500);
+          socket.emit("gesture:detected", { gesture, confidence: 0.85, sessionId: activeSessionId });
+        }
+        if (gesture === "None") lastGesture = "None";
+
+        gestureDisplay.textContent = gesture;
+        gestureDisplay.className = gesture !== "None" ? "active" : "";
+      });
+
+      // ─── VOICE TRANSCRIPTS ─────────────────────────────────────
+      socket.on("voice:transcript", (payload) => {
+        if (payload.text && voiceSubtitle) {
+          voiceSubtitle.textContent = payload.text;
+          voiceSubtitle.classList.add("show");
+          clearTimeout(subtitleTimer);
+          subtitleTimer = setTimeout(() => voiceSubtitle.classList.remove("show"), 4000);
+        }
+      });
+
+      // ─── ANNOTATIONS ───────────────────────────────────────────
+      socket.on("annotation:update", (payload) => {
+        console.log("[demo] Annotation received:", payload);
+      });
+    }
+
+    // ─── RENDER LOOP ─────────────────────────────────────────────
+    let frameCount = 0, lastFpsTime = performance.now();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      frameCount++;
+      const now = performance.now();
+      if (now - lastFpsTime >= 1000) {
+        fpsDisplay.textContent = "FPS: " + frameCount;
+        frameCount = 0; lastFpsTime = now;
+      }
+      packetDisplay.textContent = "Packets: " + packetCount;
+
+      for (const [id, model] of Object.entries(handModels)) {
+        if (now - model.lastUpdate > HAND_TIMEOUT) {
+          model.dispose(); delete handModels[id];
+        }
+      }
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener("resize", () => {
+      const w = window.innerWidth, h = window.innerHeight;
+      camera.right = w;
+      camera.bottom = -h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    });
+
+    console.log("[demo] Scene initialized, waiting for session connection...");
+  })();
+  </script>
+</body>
+</html>

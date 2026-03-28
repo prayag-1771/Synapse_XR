@@ -1,10 +1,5 @@
-import HandTracker from "@/components/HandTracker";
+import RootRouteClient from "@/components/root-route-client";
 
 export default function Home() {
-  return (
-    <main style={{ padding: "20px" }}>
-      <h1>Synapse XR — Expert Dashboard</h1>
-      <HandTracker />
-    </main>
-  );
+  return <RootRouteClient />;
 }

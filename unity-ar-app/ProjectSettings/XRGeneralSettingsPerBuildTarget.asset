@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &1
+MonoBehaviour:
+  m_ObjectHideFlags: 61
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1980249135, guid: b2e9e0a37bccef041b0d82b0d5dae18d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_Loaders:
+  - {fileID: 0}
+  m_InitManagerOnStart: 1
+  m_ProviderType: 0
+  m_RequiresSettingsProvider: 0
+  m_AutomaticLoading: 0
+  m_AutomaticRunning: 0
+  m_SettingsGroups:
+  - m_SettingsType: UnityEngine.XR.ARCore.ARCoreSettings, Unity.XR.ARCore, Version=0.0.0.0,
+      Culture=neutral, PublicKeyToken=null
+    m_SettingsKey: Unity.XR.ARCore.ARCoreSettings
