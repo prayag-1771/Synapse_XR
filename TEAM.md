@@ -6,7 +6,6 @@
 
 - **Role:** AI/ML + Unity AR App
 - **Email:** <prayag.sharma2024@vitstudent.ac.in>
-- **Phone:** 9872041778
 - **Owns:** `unity-ar-app/`, `shared/`, `expert-dashboard/src/components/HandTracker.tsx`
 - **Responsibilities:**
   - MediaPipe Hands integration (browser webcam tracking)
@@ -26,7 +25,6 @@
 
 - **Role:** ESP32 Glove Hardware
 - **Email:** <pushkar.kumarmishra2024@vitstudent.ac.in>
-- **Phone:** 9229714162
 - **Owns:** `esp32-glove/`
 - **Responsibilities:**
   - ESP32 firmware (flex sensors + IMU reading)
@@ -40,7 +38,6 @@
 
 - **Role:** AI Model Training + AR Overlays
 - **Email:** <sudarsan.r2024@vitstudent.ac.in>
-- **Phone:** 7416811107
 - **Owns:** `ai-models/`, `unity-ar-app/Assets/Scripts/AROverlayManager.cs`
 - **Responsibilities:**
   - YOLOv8 Nano dataset collection, labeling, training
@@ -55,7 +52,6 @@
 
 - **Role:** Backend + Expert Web Dashboard
 - **Email:** <ishaan.jindal2024@vitstudent.ac.in>
-- **Phone:** 9041856973
 - **Owns:** `backend/`, `expert-dashboard/`
 - **Responsibilities:**
   - Node.js + Express + Socket.IO server
