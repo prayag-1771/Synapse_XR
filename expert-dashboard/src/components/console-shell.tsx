@@ -16,7 +16,9 @@ export default function ConsoleShell({ title, subtitle, children }: ConsoleShell
         <header className="flex flex-col gap-4 border-b border-black/10 pb-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-black/55">Synapse XR</p>
+              {title !== "Synapse XR" && (
+                <p className="text-xs uppercase tracking-[0.24em] text-black/55">Synapse XR</p>
+              )}
               <h1 className="text-2xl font-semibold tracking-tight text-black md:text-4xl">{title}</h1>
             </div>
             <nav className="flex items-center gap-2 text-sm">

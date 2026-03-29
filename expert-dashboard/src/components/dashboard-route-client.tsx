@@ -145,7 +145,7 @@ export default function DashboardRouteClient() {
 
   return (
     <ConsoleShell
-      title="Expert Dashboard"
+      title={user ? `${user.role.charAt(0).toUpperCase() + user.role.slice(1)}` : "Synapse XR"}
       subtitle="Session orchestration for hybrid AR/VR workflows. Worker remains AR-first while expert control runs VR-first with this web fallback. [Testing: All roles enabled; final version will restrict to expert/admin only]"
     >
       <section className="grid gap-4 md:grid-cols-2">

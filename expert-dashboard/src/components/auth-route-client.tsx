@@ -46,7 +46,7 @@ export default function AuthRouteClient() {
 
   return (
     <ConsoleShell
-      title="Expert Authentication"
+      title="Synapse XR"
       subtitle="Access the VR-linked control plane. This dashboard is the required web fallback for operator control and debugging."
     >
       <section className="grid gap-4 md:grid-cols-[2fr_3fr]">

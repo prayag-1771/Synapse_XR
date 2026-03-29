@@ -14,8 +14,8 @@ const spaceMono = Space_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Synapse XR Expert Dashboard",
-  description: "Control surface for authentication, session management, and live AR data inspection.",
+  title: "Synapse XR",
+  description: "Web fallback interface for AR/VR session orchestration.",
 };
 
 export default function RootLayout({
