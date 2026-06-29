@@ -79,7 +79,7 @@ interface EventsResponse {
   annotations?: SessionEvent[];
 }
 
-export const backendHttpBaseUrl = (process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:3000").replace(/\/$/, "");
+export const backendHttpBaseUrl = (process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:5000").replace(/\/$/, "");
 export const backendWsBaseUrl = (process.env.NEXT_PUBLIC_BACKEND_WS_URL ?? backendHttpBaseUrl).replace(/\/$/, "");
 
 interface RequestOptions {
@@ -102,7 +102,19 @@ const apiRequest = async <T>(path: string, options: RequestOptions = {}): Promis
   });
 
   const text = await response.text();
-  const payload = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+  let payload: Record<string, unknown> = {};
+
+  if (text) {
+    try {
+      payload = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      throw new Error(
+        response.ok
+          ? "Server returned a non-JSON response."
+          : `Request failed (${response.status}): ${text.slice(0, 120)}`
+      );
+    }
+  }
 
   if (!response.ok) {
     const message = typeof payload.error === "string" ? payload.error : `Request failed (${response.status})`;

@@ -666,14 +666,14 @@ export default function SessionRouteClient({ sessionId }: SessionRouteClientProp
   }, [refreshSession, router, withAction]);
 
   useEffect(() => {
-    if (!user) {
+    if (!user || !token) {
       return;
     }
 
     setConnectionState("connecting");
 
     const socket: Socket = io(backendWsBaseUrl, {
-      transports: ["websocket"],
+      transports: ["websocket", "polling"],
       reconnection: true,
       timeout: 7000,
       auth: { token }
@@ -911,12 +911,20 @@ export default function SessionRouteClient({ sessionId }: SessionRouteClientProp
   }, [getOtherParticipantId, session, user]);
 
   useEffect(() => {
-    if (!remotePeerUserId || !localStreamRef.current) {
+    if (!remotePeerUserId || !user) {
+      return;
+    }
+
+    // Workers need a local camera stream before offering; experts are receive-only and can offer immediately.
+    const canInitiateWebRtc =
+      Boolean(localStreamRef.current) || user.role === "expert";
+
+    if (!canInitiateWebRtc) {
       return;
     }
 
     void maybeStartOffer();
-  }, [maybeStartOffer, remotePeerUserId]);
+  }, [maybeStartOffer, remotePeerUserId, user]);
 
   useEffect(() => {
     return () => {

@@ -139,7 +139,7 @@ export default function HandTracker({
                 }
               }
             },
-            facingMode: 'environment', // Use back camera
+            facingMode: "user", // Expert dashboard uses webcam / front camera
             width: 320,   // Low resolution for maximum ML performance
             height: 240,
           });

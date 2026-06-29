@@ -11,7 +11,7 @@ const requireEnv = (name: string, fallback?: string): string => {
 };
 
 export const env = {
-  port: Number(process.env.PORT ?? 3001),
+  port: Number(process.env.PORT ?? 5000),
   nodeEnv: process.env.NODE_ENV ?? "development",
   clientOrigin: requireEnv("CLIENT_ORIGIN", "http://localhost:3000"),
   jwtSecret: requireEnv("JWT_SECRET", "replace_me_for_local_dev"),

@@ -144,8 +144,15 @@ const bootstrap = async (): Promise<void> => {
     await attachSocketRedisBridge(io, serverId);
     startListening();
   } catch (error) {
+    const message =
+      error instanceof AggregateError
+        ? error.errors.map((entry) => (entry instanceof Error ? entry.message : String(entry))).join("; ")
+        : error instanceof Error
+          ? error.message || error.name
+          : String(error);
+
     logger.error("server_bootstrap_failed", {
-      error: error instanceof Error ? error.message : "Unknown bootstrap error"
+      error: message || "Unknown bootstrap error"
     });
     process.exit(1);
   }
